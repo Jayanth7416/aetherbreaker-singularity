@@ -9,12 +9,12 @@ in vec4 aColor;
 uniform mat4 uViewProj;
 out vec3 vNormal;
 out vec4 vColor;
-out float vWorldZ;
+out vec3 vWorldPos;
 void main() {
   gl_Position = uViewProj * vec4(aPos, 1.0);
   vNormal = aNormal;
   vColor = aColor;
-  vWorldZ = aPos.z;
+  vWorldPos = aPos;
 }
 `;
 
@@ -22,17 +22,52 @@ const SOLID_FS = `#version 300 es
 precision highp float;
 in vec3 vNormal;
 in vec4 vColor;
-in float vWorldZ;
+in vec3 vWorldPos;
 out vec4 fragColor;
 void main() {
-  vec3 n = normalize(vNormal);
+  float nLen = max(0.001, length(vNormal));
+  float matId = floor(nLen + 0.5);
+  vec3 n = vNormal / nLen;
   vec3 sunDir = normalize(vec3(0.45, -0.55, 0.72));
   float diff = max(0.0, dot(n, sunDir));
-  float roofBoost = smoothstep(0.5, 1.0, n.z) * 0.28;
-  float altGrad = clamp(vWorldZ / 180.0, 0.0, 1.0);
-  float floorBand = step(0.84, fract(vWorldZ / 26.0)) * (1.0 - abs(n.z)) * 0.25;
-  vec3 lit = vColor.rgb * (0.34 + diff * 0.62 + roofBoost + altGrad * 0.22) + vColor.rgb * floorBand;
-  fragColor = vec4(lit, vColor.a);
+  float roofBoost = smoothstep(0.5, 1.0, n.z) * 0.25;
+  float altGrad = clamp(vWorldPos.z / 200.0, 0.0, 1.0);
+  vec3 baseLit = vColor.rgb * (0.36 + diff * 0.58 + roofBoost + altGrad * 0.22);
+
+  if (matId < 1.5 && abs(n.z) < 0.35) {
+    // Material 1: Architectural skyscraper wall with illuminated multi-story window grid
+    float u = abs(n.x) > 0.5 ? vWorldPos.y : vWorldPos.x;
+    float v = vWorldPos.z;
+    vec2 grid = vec2(u / 9.5, v / 11.5);
+    vec2 cell = fract(grid);
+    vec2 wid = floor(grid);
+    float isPane = step(0.18, cell.x) * step(cell.x, 0.82)
+                 * step(0.22, cell.y) * step(cell.y, 0.84)
+                 * step(7.0, v);
+    float h1 = fract(sin(dot(wid, vec2(12.9898, 78.233))) * 43758.5453);
+    float h2 = fract(sin(dot(wid, vec2(39.346, 11.135))) * 24634.6345);
+    vec3 warmLight = vec3(1.0, 0.84, 0.52);
+    vec3 coolLight = vec3(0.48, 0.92, 1.0);
+    vec3 winCol = mix(coolLight, warmLight, step(0.45, h2));
+    winCol = mix(winCol, vColor.rgb * 2.6 + vec3(0.25), step(0.86, h2));
+    float litMask = step(0.32, h1);
+    vec3 darkGlass = baseLit * 0.55 + vec3(0.04, 0.09, 0.16) * (0.5 + 0.5 * altGrad);
+    vec3 paneCol = mix(darkGlass, winCol * (0.75 + 0.45 * h1), litMask);
+    float floorLedge = step(0.91, cell.y) * 0.18;
+    vec3 finalRgb = mix(baseLit * 0.82 + floorLedge, paneCol, isPane);
+    fragColor = vec4(finalRgb, vColor.a);
+  } else if (matId > 2.5 && matId < 3.5) {
+    // Material 3: Organic 3D Tree Foliage & Park Turf
+    float canopyVar = 0.88 + 0.18 * sin(vWorldPos.x * 0.25 + vWorldPos.y * 0.25 + vWorldPos.z * 0.35);
+    vec3 rim = vec3(0.12, 0.26, 0.14) * smoothstep(0.0, 1.0, n.z);
+    fragColor = vec4(baseLit * canopyVar + rim, vColor.a);
+  } else if (matId >= 3.5) {
+    // Material 4: Emissive Neon Signage, Headlights & Hologram Panels
+    fragColor = vec4(vColor.rgb * 1.45 + vec3(0.18), vColor.a);
+  } else {
+    // Material 2: Structural Concrete, Roof Decks, Roads, Bridges & Tree Trunks
+    fragColor = vec4(baseLit, vColor.a);
+  }
 }
 `;
 
@@ -399,7 +434,7 @@ export class WebGLPostRenderer {
     this.defaultZ = 55;
 
     // 3D Solid Shaded Mesh Buffer: x,y,z, nx,ny,nz, r,g,b,a (10 floats/vert)
-    this.maxSolidVerts = 36000;
+    this.maxSolidVerts = 120000;
     this.solidFloatsPerVert = 10;
     this.solidData = new Float32Array(this.maxSolidVerts * this.solidFloatsPerVert);
     this.solidVertCount = 0;
@@ -947,22 +982,119 @@ export class WebGLPostRenderer {
     this._pushSolidVertex(p3[0], p3[1], p3[2], nx, ny, nz, r, g, b, a);
   }
 
-  drawSolidBox3D(cx, cy, baseZ, w, d, h, r, g, b, a = 0.92, wr = r, wg = g, wb = b, wa = 0.85) {
+  drawSolidTri3D(p0, p1, p2, nx, ny, nz, r, g, b, a = 0.94) {
+    if (this.fallback2D) return;
+    if (this.solidVertCount + 3 > this.maxSolidVerts) {
+      this._flushSolids();
+    }
+    this._pushSolidVertex(p0[0], p0[1], p0[2], nx, ny, nz, r, g, b, a);
+    this._pushSolidVertex(p1[0], p1[1], p1[2], nx, ny, nz, r, g, b, a);
+    this._pushSolidVertex(p2[0], p2[1], p2[2], nx, ny, nz, r, g, b, a);
+  }
+
+  _outwardNormal(p0, p1, p2, hint, matId = 1.0) {
+    const ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2];
+    const vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
+    let nx = uy * vz - uz * vy;
+    let ny = uz * vx - ux * vz;
+    let nz = ux * vy - uy * vx;
+    const dot = nx * hint[0] + ny * hint[1] + nz * hint[2];
+    if (dot < 0) {
+      nx = -nx; ny = -ny; nz = -nz;
+    }
+    const len = Math.hypot(nx, ny, nz) || 1;
+    const s = matId / len;
+    return [nx * s, ny * s, nz * s];
+  }
+
+  drawSolidBox3D(cx, cy, baseZ, w, d, h, r, g, b, a = 0.94, wr = r, wg = g, wb = b, wa = 0.75, matId = 1.0) {
     const hw = w * 0.5;
     const hd = d * 0.5;
     const topZ = baseZ + h;
     const x0 = cx - hw, x1 = cx + hw;
     const y0 = cy - hd, y1 = cy + hd;
+    const roofMat = Math.abs(matId - 1.0) < 0.25 ? 2.0 : matId;
 
-    // 4 Side Walls + Roof Face
-    this.drawSolidQuad3D([x0, y1, baseZ], [x1, y1, baseZ], [x1, y1, topZ], [x0, y1, topZ], 0, 1, 0, r, g, b, a);
-    this.drawSolidQuad3D([x1, y0, baseZ], [x0, y0, baseZ], [x0, y0, topZ], [x1, y0, topZ], 0, -1, 0, r, g, b, a);
-    this.drawSolidQuad3D([x1, y1, baseZ], [x1, y0, baseZ], [x1, y0, topZ], [x1, y1, topZ], 1, 0, 0, r, g, b, a);
-    this.drawSolidQuad3D([x0, y0, baseZ], [x0, y1, baseZ], [x0, y1, topZ], [x0, y0, topZ], -1, 0, 0, r, g, b, a);
-    this.drawSolidQuad3D([x0, y0, topZ], [x1, y0, topZ], [x1, y1, topZ], [x0, y1, topZ], 0, 0, 1, r * 1.25, g * 1.25, b * 1.25, a);
+    // 4 Side Walls + Solid Roof Deck
+    this.drawSolidQuad3D([x0, y1, baseZ], [x1, y1, baseZ], [x1, y1, topZ], [x0, y1, topZ], 0, matId, 0, r, g, b, a);
+    this.drawSolidQuad3D([x1, y0, baseZ], [x0, y0, baseZ], [x0, y0, topZ], [x1, y0, topZ], 0, -matId, 0, r, g, b, a);
+    this.drawSolidQuad3D([x1, y1, baseZ], [x1, y0, baseZ], [x1, y0, topZ], [x1, y1, topZ], matId, 0, 0, r, g, b, a);
+    this.drawSolidQuad3D([x0, y0, baseZ], [x0, y1, baseZ], [x0, y1, topZ], [x0, y0, topZ], -matId, 0, 0, r, g, b, a);
+    this.drawSolidQuad3D([x0, y0, topZ], [x1, y0, topZ], [x1, y1, topZ], [x0, y1, topZ], 0, 0, roofMat, r * 1.18, g * 1.18, b * 1.18, a);
 
-    // Bright LiDAR Neon Edge Outlines
-    this.drawBox3D(cx, cy, baseZ, w, d, h, wr, wg, wb, wa, 2.0);
+    if (wa > 0.01) {
+      this.drawBox3D(cx, cy, baseZ, w, d, h, wr, wg, wb, wa, 1.8);
+    }
+  }
+
+  drawSolidPyramid3D(cx, cy, baseZ, w, d, h, r, g, b, a = 0.95, wr = r, wg = g, wb = b, wa = 0.0, matId = 3.0) {
+    const hw = w * 0.5;
+    const hd = d * 0.5;
+    const x0 = cx - hw, x1 = cx + hw;
+    const y0 = cy - hd, y1 = cy + hd;
+    const apex = [cx, cy, baseZ + h];
+    const c00 = [x0, y0, baseZ], c10 = [x1, y0, baseZ], c11 = [x1, y1, baseZ], c01 = [x0, y1, baseZ];
+
+    const sides = [
+      [c01, c11, [0, 1, 0.35]],
+      [c10, c00, [0, -1, 0.35]],
+      [c11, c10, [1, 0, 0.35]],
+      [c00, c01, [-1, 0, 0.35]]
+    ];
+    for (const [p0, p1, hint] of sides) {
+      const n = this._outwardNormal(p0, p1, apex, hint, matId);
+      this.drawSolidTri3D(p0, p1, apex, n[0], n[1], n[2], r, g, b, a);
+    }
+
+    if (wa > 0.01) {
+      for (const c of [c00, c10, c11, c01]) {
+        this.drawLine3D(c[0], c[1], c[2], apex[0], apex[1], apex[2], wr, wg, wb, wa, 1.6);
+      }
+      this.drawLine3D(x0, y0, baseZ, x1, y0, baseZ, wr, wg, wb, wa * 0.7, 1.4);
+      this.drawLine3D(x1, y0, baseZ, x1, y1, baseZ, wr, wg, wb, wa * 0.7, 1.4);
+      this.drawLine3D(x1, y1, baseZ, x0, y1, baseZ, wr, wg, wb, wa * 0.7, 1.4);
+      this.drawLine3D(x0, y1, baseZ, x0, y0, baseZ, wr, wg, wb, wa * 0.7, 1.4);
+    }
+  }
+
+  drawSolidFrustum3D(cx, cy, baseZ, w0, d0, w1, d1, h, r, g, b, a = 0.95, wr = r, wg = g, wb = b, wa = 0.0, matId = 1.0) {
+    const hw0 = w0 * 0.5, hd0 = d0 * 0.5;
+    const hw1 = w1 * 0.5, hd1 = d1 * 0.5;
+    const topZ = baseZ + h;
+
+    const bx0 = cx - hw0, bx1 = cx + hw0, by0 = cy - hd0, by1 = cy + hd0;
+    const tx0 = cx - hw1, tx1 = cx + hw1, ty0 = cy - hd1, ty1 = cy + hd1;
+
+    const b00 = [bx0, by0, baseZ], b10 = [bx1, by0, baseZ], b11 = [bx1, by1, baseZ], b01 = [bx0, by1, baseZ];
+    const t00 = [tx0, ty0, topZ], t10 = [tx1, ty0, topZ], t11 = [tx1, ty1, topZ], t01 = [tx0, ty1, topZ];
+
+    const quads = [
+      [b01, b11, t11, t01, [0, 1, 0.2]],
+      [b10, b00, t00, t10, [0, -1, 0.2]],
+      [b11, b10, t10, t11, [1, 0, 0.2]],
+      [b00, b01, t01, t00, [-1, 0, 0.2]]
+    ];
+    for (const [p0, p1, p2, p3, hint] of quads) {
+      const n = this._outwardNormal(p0, p1, p2, hint, matId);
+      this.drawSolidQuad3D(p0, p1, p2, p3, n[0], n[1], n[2], r, g, b, a);
+    }
+
+    const roofMat = Math.abs(matId - 1.0) < 0.25 ? 2.0 : matId;
+    this.drawSolidQuad3D(t00, t10, t11, t01, 0, 0, roofMat, r * 1.18, g * 1.18, b * 1.18, a);
+
+    if (wa > 0.01) {
+      const rings = [[b00, b10, b11, b01, wa * 0.65], [t00, t10, t11, t01, wa]];
+      for (const [p0, p1, p2, p3, ra] of rings) {
+        this.drawLine3D(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], wr, wg, wb, ra, 1.7);
+        this.drawLine3D(p1[0], p1[1], p1[2], p2[0], p2[1], p2[2], wr, wg, wb, ra, 1.7);
+        this.drawLine3D(p2[0], p2[1], p2[2], p3[0], p3[1], p3[2], wr, wg, wb, ra, 1.7);
+        this.drawLine3D(p3[0], p3[1], p3[2], p0[0], p0[1], p0[2], wr, wg, wb, ra, 1.7);
+      }
+      this.drawLine3D(b00[0], b00[1], b00[2], t00[0], t00[1], t00[2], wr, wg, wb, wa * 0.8, 1.6);
+      this.drawLine3D(b10[0], b10[1], b10[2], t10[0], t10[1], t10[2], wr, wg, wb, wa * 0.8, 1.6);
+      this.drawLine3D(b11[0], b11[1], b11[2], t11[0], t11[1], t11[2], wr, wg, wb, wa * 0.8, 1.6);
+      this.drawLine3D(b01[0], b01[1], b01[2], t01[0], t01[1], t01[2], wr, wg, wb, wa * 0.8, 1.6);
+    }
   }
 
   _pushLineVertex3D(x, y, z, ox, oy, oz, side, r, g, b, a, u, v) {

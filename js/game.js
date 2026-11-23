@@ -1,10 +1,10 @@
 // AETHERBREAKER: SINGULARITY — Core Game Loop, Wave Director, Combat Physics, HUD & FX Lab
 
-import { ProceduralAudioEngine } from './audio.js?v=3d2';
-import { SpacetimeGrid } from './grid.js?v=3d2';
-import { WebGLPostRenderer } from './renderer.js?v=3d2';
-import { SpriteAtlasManager } from './sprites.js?v=3d2';
-import { ARMapSystem } from './ar_map.js?v=3d2';
+import { ProceduralAudioEngine } from './audio.js?v=3d3';
+import { SpacetimeGrid } from './grid.js?v=3d3';
+import { WebGLPostRenderer } from './renderer.js?v=3d3';
+import { SpriteAtlasManager } from './sprites.js?v=3d3';
+import { ARMapSystem } from './ar_map.js?v=3d3';
 import {
   SHIP_CLASSES,
   UPGRADES,
@@ -14,7 +14,7 @@ import {
   generateLightningPoints,
   createEnemy,
   createBoss
-} from './entities.js?v=3d2';
+} from './entities.js?v=3d3';
 
 const PACING_PRESETS = [
   { id: 'tactical', label: 'TACTICAL', scale: 0.72, desc: 'Readable 3D canyon dogfighting speed' },
