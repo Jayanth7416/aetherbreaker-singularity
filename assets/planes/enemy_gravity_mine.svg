@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="hullGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#361642"/>
+      <stop offset="50%" stop-color="#9b4ca8"/>
+      <stop offset="100%" stop-color="#361642"/>
+    </linearGradient>
+    <radialGradient id="canopyGrad" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="45%" stop-color="#f5a8ff"/>
+      <stop offset="100%" stop-color="#e03eff"/>
+    </radialGradient>
+    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <polygon points="143.36,104.96 215.04,112.64 215.04,138.24 145.92,143.36 110.08,143.36 40.96,138.24 40.96,112.64 112.64,104.96" fill="url(#hullGrad)" stroke="#e03eff" stroke-width="1.6"/>
+  <polygon points="138.24,192.00 174.08,212.48 174.08,225.28 138.24,212.48 117.76,212.48 81.92,225.28 81.92,212.48 117.76,192.00" fill="url(#hullGrad)" stroke="#e03eff" stroke-width="1.4"/>
+  <polygon points="128.00,40.96 148.48,71.68 151.04,156.16 143.36,212.48 128.00,207.36 112.64,212.48 104.96,156.16 107.52,71.68" fill="url(#hullGrad)" stroke="#e03eff" stroke-width="1.8"/>
+  <line x1="128" y1="30" x2="128" y2="196" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.5"/>
+  <ellipse cx="128.0" cy="71.7" rx="14.1" ry="19.2" fill="url(#canopyGrad)" stroke="#e03eff" stroke-width="1.2" filter="url(#neonGlow)"/>
+  <circle cx="128.0" cy="135.7" r="23.0" fill="#361642" stroke="#e03eff" stroke-width="2.2"/>
+  <line x1="110.7" y1="135.7" x2="145.3" y2="135.7" stroke="#2cf5ff" stroke-width="3" filter="url(#neonGlow)"/>
+  <circle cx="43.5" cy="117.8" r="38.4" fill="#e03eff" fill-opacity="0.14" stroke="#e03eff" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+  <circle cx="212.5" cy="117.8" r="38.4" fill="#e03eff" fill-opacity="0.14" stroke="#e03eff" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+</svg>

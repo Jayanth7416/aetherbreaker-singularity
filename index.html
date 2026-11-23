@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AETHERBREAKER // SINGULARITY</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="glCanvas"></canvas>
+    <canvas id="hudCanvas"></canvas>
+
+    <!-- In-Game Top-Right Quick Controls -->
+    <div id="topControls" class="hidden">
+      <button id="btnAutoFire" class="hud-btn" title="Toggle Auto-Fire [C]">
+        <span class="dot"></span> AUTO-FIRE <kbd>C</kbd>
+      </button>
+      <button id="btnFxLab" class="hud-btn" title="Open FX & Physics Lab [TAB]">
+        FX LAB <kbd>TAB</kbd>
+      </button>
+      <button id="btnMute" class="hud-btn" title="Toggle Procedural Audio [M]">
+        AUDIO: ON <kbd>M</kbd>
+      </button>
+      <button id="btnPause" class="hud-btn" title="Pause [ESC]">
+        PAUSE <kbd>ESC</kbd>
+      </button>
+    </div>
+
+    <!-- Live FX & Physics Lab Drawer -->
+    <aside id="fxDrawer" class="glass-panel hidden">
+      <div class="drawer-header">
+        <div>
+          <span class="badge badge-cyan">REALTIME SHADER &amp; PHYSICS</span>
+          <h3>FX &amp; PHYSICS LAB</h3>
+        </div>
+        <button id="btnCloseFx" class="icon-btn" title="Close [TAB]">&times;</button>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-row">
+          <label for="sliderBloom">HDR Bloom Intensity <span id="valBloom">1.25</span></label>
+          <input id="sliderBloom" type="range" min="0" max="2.5" step="0.05" value="1.25" />
+        </div>
+        <div class="slider-row">
+          <label for="sliderElasticity">Spacetime Grid Elasticity <span id="valElasticity">1.00</span></label>
+          <input id="sliderElasticity" type="range" min="0.1" max="2.2" step="0.05" value="1.0" />
+        </div>
+        <div class="slider-row">
+          <label for="sliderAberration">Chromatic Aberration <span id="valAberration">1.00</span></label>
+          <input id="sliderAberration" type="range" min="0" max="3.0" step="0.05" value="1.0" />
+        </div>
+        <div class="slider-row">
+          <label for="sliderLensing">Gravity Lensing <span id="valLensing">1.20</span></label>
+          <input id="sliderLensing" type="range" min="0" max="2.5" step="0.05" value="1.2" />
+        </div>
+        <div class="slider-row">
+          <label for="sliderTimeScale">Time Dilation Scale <span id="valTimeScale">1.00</span></label>
+          <input id="sliderTimeScale" type="range" min="0.15" max="2.0" step="0.05" value="1.0" />
+        </div>
+      </div>
+
+      <div class="lab-divider">SANDBOX TRIGGERS</div>
+      <div class="lab-actions">
+        <button id="btnToggleClickBH" class="lab-btn toggle-btn">Click = Black Hole: OFF</button>
+        <button id="btnSpawnBH" class="lab-btn">Spawn Singularity</button>
+        <button id="btnTriggerNova" class="lab-btn">Grid Supernova</button>
+        <button id="btnMaxOverdrive" class="lab-btn">Fill Overdrive [E]</button>
+        <button id="btnSpawnBoss5" class="lab-btn boss-btn">Spawn Archon (W5)</button>
+        <button id="btnSpawnBoss10" class="lab-btn boss-btn">Spawn Seraphim (W10)</button>
+        <button id="btnSpawnBoss15" class="lab-btn boss-btn">Spawn Omega (W15)</button>
+        <button id="btnGrantUpgrade" class="lab-btn">Draft Upgrade</button>
+        <button id="btnMaxUpgrades" class="lab-btn accent-btn">Godmode All Upgrades</button>
+        <button id="btnClearEnemies" class="lab-btn danger-btn">Purge Arena</button>
+      </div>
+
+      <div class="telemetry-box">
+        <div><span>RENDERER</span><strong id="telRenderer">WebGL2 HDR</strong></div>
+        <div><span>PARTICLES</span><strong id="telParticles">0</strong></div>
+        <div><span>SINGULARITIES</span><strong id="telSingularities">0</strong></div>
+      </div>
+    </aside>
+
+    <!-- Main Menu Overlay -->
+    <div id="menuOverlay" class="overlay">
+      <div class="menu-shell glass-panel">
+        <div class="hero-header">
+          <div class="hero-eyebrow">WEBGL2 SPACETIME ENGINE // PROCEDURAL SYNTHWAVE</div>
+          <h1 class="hero-title" data-text="AETHERBREAKER">AETHERBREAKER</h1>
+          <div class="hero-subtitle">S I N G U L A R I T Y</div>
+          <div id="bestStatsBar" class="best-stats"></div>
+        </div>
+
+        <div class="section-label">SELECT VESSEL FRAME</div>
+        <div id="shipGrid" class="ship-grid"></div>
+
+        <div class="section-label">SELECT OPERATION PROTOCOL</div>
+        <div id="modeGrid" class="mode-grid"></div>
+
+        <div class="menu-footer">
+          <button id="btnStartGame" class="primary-cta">
+            <span class="cta-glow"></span>
+            INITIATE BREACH
+          </button>
+          <div class="controls-strip">
+            <span><kbd>W A S D</kbd> Thrust</span>
+            <span><kbd>LMB</kbd> / <kbd>C</kbd> Fire &amp; Auto</span>
+            <span><kbd>SPACE</kbd> Phase Dash &amp; Parry</span>
+            <span><kbd>RMB</kbd> / <kbd>Q</kbd> Singularity Well</span>
+            <span><kbd>E</kbd> / <kbd>F</kbd> Novabeam Overdrive</span>
+            <span><kbd>TAB</kbd> FX Lab</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Roguelite Upgrade Modal -->
+    <div id="upgradeModal" class="overlay hidden">
+      <div class="upgrade-shell">
+        <div class="upgrade-header">
+          <div class="badge badge-cyan" id="upgradeReasonBadge">WAVE CLEARED // MODULE SYNC</div>
+          <h2>SELECT AUGMENTATION</h2>
+          <p>Press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> or click an augmentation core to integrate</p>
+        </div>
+        <div id="upgradeCards" class="upgrade-cards"></div>
+      </div>
+    </div>
+
+    <!-- Pause Modal -->
+    <div id="pauseOverlay" class="overlay hidden">
+      <div class="modal-card glass-panel">
+        <div class="badge badge-violet">SIMULATION SUSPENDED</div>
+        <h2>SYSTEM PAUSED</h2>
+        <div class="modal-actions">
+          <button id="btnResume" class="primary-cta">RESUME COMBAT</button>
+          <button id="btnPauseFx" class="secondary-cta">OPEN FX &amp; PHYSICS LAB</button>
+          <button id="btnRestart" class="secondary-cta">RESTART RUN</button>
+          <button id="btnQuitMenu" class="secondary-cta danger-outline">RETURN TO TERMINAL</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="gameOverOverlay" class="overlay hidden">
+      <div class="modal-card glass-panel gameover-card">
+        <div class="badge badge-crimson" id="gameOverBadge">VESSEL DESTROYED</div>
+        <h2 id="gameOverTitle">SINGULARITY COLLAPSE</h2>
+        <div id="runStatsGrid" class="run-stats-grid"></div>
+        <div id="collectedUpgradesList" class="collected-upgrades"></div>
+        <div class="modal-actions horizontal">
+          <button id="btnRetryRun" class="primary-cta">REBOOT SYSTEM</button>
+          <button id="btnOverMenu" class="secondary-cta">MAIN TERMINAL</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>

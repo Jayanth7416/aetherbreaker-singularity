@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="hullGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#18304a"/>
+      <stop offset="50%" stop-color="#528eb3"/>
+      <stop offset="100%" stop-color="#18304a"/>
+    </linearGradient>
+    <radialGradient id="canopyGrad" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="45%" stop-color="#b3fcff"/>
+      <stop offset="100%" stop-color="#2cf5ff"/>
+    </radialGradient>
+    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <polygon points="143.36,33.28 161.28,61.44 143.36,71.68 112.64,71.68 94.72,61.44 112.64,33.28" fill="url(#hullGrad)" stroke="#2cf5ff" stroke-width="1.4"/>
+  <polygon points="128.00,46.08 181.76,76.80 250.88,148.48 245.76,184.32 194.56,166.40 166.40,199.68 128.00,184.32 89.60,199.68 61.44,166.40 10.24,184.32 5.12,148.48 74.24,76.80" fill="url(#hullGrad)" stroke="#2cf5ff" stroke-width="1.6"/>
+  <polygon points="158.72,171.52 184.32,207.36 171.52,215.04 151.04,197.12 104.96,197.12 84.48,215.04 71.68,207.36 97.28,171.52" fill="url(#hullGrad)" stroke="#2cf5ff" stroke-width="1.4"/>
+  <polygon points="128.00,20.48 151.04,56.32 158.72,151.04 148.48,215.04 128.00,204.80 107.52,215.04 97.28,151.04 104.96,56.32" fill="url(#hullGrad)" stroke="#2cf5ff" stroke-width="1.8"/>
+  <line x1="17.9" y1="153.6" x2="102.4" y2="99.8" stroke="#2cf5ff" stroke-width="2.6" filter="url(#neonGlow)"/>
+  <line x1="238.1" y1="153.6" x2="153.6" y2="99.8" stroke="#2cf5ff" stroke-width="2.6" filter="url(#neonGlow)"/>
+  <line x1="128" y1="30" x2="128" y2="196" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.5"/>
+  <ellipse cx="128.0" cy="58.9" rx="14.1" ry="17.9" fill="url(#canopyGrad)" stroke="#2cf5ff" stroke-width="1.2" filter="url(#neonGlow)"/>
+  <ellipse cx="105.0" cy="209.9" rx="6.5" ry="4.5" fill="#ff2ebd" filter="url(#neonGlow)"/>
+  <ellipse cx="120.3" cy="209.9" rx="6.5" ry="4.5" fill="#ff2ebd" filter="url(#neonGlow)"/>
+  <ellipse cx="135.7" cy="209.9" rx="6.5" ry="4.5" fill="#ff2ebd" filter="url(#neonGlow)"/>
+  <ellipse cx="151.0" cy="209.9" rx="6.5" ry="4.5" fill="#ff2ebd" filter="url(#neonGlow)"/>
+  <circle cx="41.0" cy="130.6" r="17.9" fill="#2cf5ff" fill-opacity="0.14" stroke="#2cf5ff" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+  <circle cx="74.2" cy="110.1" r="17.9" fill="#2cf5ff" fill-opacity="0.14" stroke="#2cf5ff" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+  <circle cx="181.8" cy="110.1" r="17.9" fill="#2cf5ff" fill-opacity="0.14" stroke="#2cf5ff" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+  <circle cx="215.0" cy="130.6" r="17.9" fill="#2cf5ff" fill-opacity="0.14" stroke="#2cf5ff" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+</svg>

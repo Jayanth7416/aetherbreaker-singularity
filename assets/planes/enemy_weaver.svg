@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="hullGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#153d2e"/>
+      <stop offset="50%" stop-color="#49a87c"/>
+      <stop offset="100%" stop-color="#153d2e"/>
+    </linearGradient>
+    <radialGradient id="canopyGrad" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="45%" stop-color="#9dffda"/>
+      <stop offset="100%" stop-color="#2eff9f"/>
+    </radialGradient>
+    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <polygon points="171.52,92.16 186.88,92.16 186.88,163.84 171.52,163.84 84.48,163.84 69.12,163.84 69.12,92.16 84.48,92.16" fill="url(#hullGrad)" stroke="#2eff9f" stroke-width="1.4"/>
+  <polygon points="138.24,110.08 243.20,122.88 243.20,145.92 140.80,148.48 115.20,148.48 12.80,145.92 12.80,122.88 117.76,110.08" fill="url(#hullGrad)" stroke="#2eff9f" stroke-width="1.6"/>
+  <polygon points="135.68,189.44 176.64,212.48 174.08,222.72 135.68,212.48 120.32,212.48 81.92,222.72 79.36,212.48 120.32,189.44" fill="url(#hullGrad)" stroke="#2eff9f" stroke-width="1.4"/>
+  <polygon points="128.00,23.04 140.80,71.68 143.36,199.68 128.00,215.04 112.64,199.68 115.20,71.68" fill="url(#hullGrad)" stroke="#2eff9f" stroke-width="1.8"/>
+  <line x1="128" y1="30" x2="128" y2="196" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.5"/>
+  <ellipse cx="128.0" cy="79.4" rx="8.3" ry="17.9" fill="url(#canopyGrad)" stroke="#2eff9f" stroke-width="1.2" filter="url(#neonGlow)"/>
+  <circle cx="76.8" cy="87.0" r="25.6" fill="#2eff9f" fill-opacity="0.14" stroke="#2eff9f" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+  <circle cx="179.2" cy="87.0" r="25.6" fill="#2eff9f" fill-opacity="0.14" stroke="#2eff9f" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+</svg>

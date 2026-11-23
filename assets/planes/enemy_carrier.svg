@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="hullGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4a2c14"/>
+      <stop offset="50%" stop-color="#c4844b"/>
+      <stop offset="100%" stop-color="#4a2c14"/>
+    </linearGradient>
+    <radialGradient id="canopyGrad" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="45%" stop-color="#ffdf9e"/>
+      <stop offset="100%" stop-color="#ff952e"/>
+    </radialGradient>
+    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <polygon points="148.48,97.28 248.32,145.92 248.32,171.52 153.60,148.48 102.40,148.48 7.68,171.52 7.68,145.92 107.52,97.28" fill="url(#hullGrad)" stroke="#ff952e" stroke-width="1.6"/>
+  <polygon points="138.24,202.24 189.44,225.28 186.88,238.08 138.24,227.84 117.76,227.84 69.12,238.08 66.56,225.28 117.76,202.24" fill="url(#hullGrad)" stroke="#ff952e" stroke-width="1.4"/>
+  <polygon points="128.00,20.48 148.48,48.64 153.60,189.44 140.80,230.40 128.00,227.84 115.20,230.40 102.40,189.44 107.52,48.64" fill="url(#hullGrad)" stroke="#ff952e" stroke-width="1.8"/>
+  <line x1="128" y1="30" x2="128" y2="196" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.5"/>
+  <ellipse cx="128.0" cy="51.2" rx="12.8" ry="15.4" fill="url(#canopyGrad)" stroke="#ff952e" stroke-width="1.2" filter="url(#neonGlow)"/>
+  <ellipse cx="56.3" cy="156.2" rx="6.5" ry="4.5" fill="#ffe066" filter="url(#neonGlow)"/>
+  <ellipse cx="84.5" cy="145.9" rx="6.5" ry="4.5" fill="#ffe066" filter="url(#neonGlow)"/>
+  <ellipse cx="171.5" cy="145.9" rx="6.5" ry="4.5" fill="#ffe066" filter="url(#neonGlow)"/>
+  <ellipse cx="199.7" cy="156.2" rx="6.5" ry="4.5" fill="#ffe066" filter="url(#neonGlow)"/>
+  <circle cx="56.3" cy="133.1" r="19.2" fill="#ff952e" fill-opacity="0.14" stroke="#ff952e" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+  <circle cx="84.5" cy="122.9" r="19.2" fill="#ff952e" fill-opacity="0.14" stroke="#ff952e" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+  <circle cx="171.5" cy="122.9" r="19.2" fill="#ff952e" fill-opacity="0.14" stroke="#ff952e" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+  <circle cx="199.7" cy="133.1" r="19.2" fill="#ff952e" fill-opacity="0.14" stroke="#ff952e" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="10 6"/>
+</svg>

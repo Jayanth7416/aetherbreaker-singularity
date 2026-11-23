@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="hullGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3d1522"/>
+      <stop offset="50%" stop-color="#a84c5c"/>
+      <stop offset="100%" stop-color="#3d1522"/>
+    </linearGradient>
+    <radialGradient id="canopyGrad" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="45%" stop-color="#ff8da8"/>
+      <stop offset="100%" stop-color="#ff335f"/>
+    </radialGradient>
+    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <polygon points="135.68,92.16 227.84,176.64 220.16,199.68 148.48,186.88 107.52,186.88 35.84,199.68 28.16,176.64 120.32,92.16" fill="url(#hullGrad)" stroke="#ff335f" stroke-width="1.6"/>
+  <polygon points="128.00,17.92 142.08,70.40 145.92,194.56 128.00,212.48 110.08,194.56 113.92,70.40" fill="url(#hullGrad)" stroke="#ff335f" stroke-width="1.8"/>
+  <line x1="128" y1="30" x2="128" y2="196" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.5"/>
+  <ellipse cx="128.0" cy="84.5" rx="7.7" ry="20.5" fill="url(#canopyGrad)" stroke="#ff335f" stroke-width="1.2" filter="url(#neonGlow)"/>
+  <ellipse cx="128.0" cy="215.0" rx="6.5" ry="4.5" fill="#ff7a99" filter="url(#neonGlow)"/>
+</svg>

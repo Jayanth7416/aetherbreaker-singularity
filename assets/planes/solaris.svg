@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="hullGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#471c29"/>
+      <stop offset="50%" stop-color="#b36270"/>
+      <stop offset="100%" stop-color="#471c29"/>
+    </linearGradient>
+    <radialGradient id="canopyGrad" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="45%" stop-color="#ffd47a"/>
+      <stop offset="100%" stop-color="#ff4866"/>
+    </radialGradient>
+    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <polygon points="138.24,58.88 163.84,81.92 158.72,94.72 138.24,87.04 117.76,87.04 97.28,94.72 92.16,81.92 117.76,58.88" fill="url(#hullGrad)" stroke="#ff4866" stroke-width="1.4"/>
+  <polygon points="140.80,94.72 238.08,156.16 243.20,181.76 176.64,176.64 148.48,189.44 107.52,189.44 79.36,176.64 12.80,181.76 17.92,156.16 115.20,94.72" fill="url(#hullGrad)" stroke="#ff4866" stroke-width="1.6"/>
+  <polygon points="145.92,186.88 186.88,222.72 179.20,232.96 145.92,215.04 110.08,215.04 76.80,232.96 69.12,222.72 110.08,186.88" fill="url(#hullGrad)" stroke="#ff4866" stroke-width="1.4"/>
+  <polygon points="128.00,12.80 143.36,51.20 156.16,115.20 158.72,197.12 145.92,222.72 128.00,215.04 110.08,222.72 97.28,197.12 99.84,115.20 112.64,51.20" fill="url(#hullGrad)" stroke="#ff4866" stroke-width="1.8"/>
+  <line x1="25.6" y1="160.0" x2="97.3" y2="125.4" stroke="#ff4866" stroke-width="2.6" filter="url(#neonGlow)"/>
+  <line x1="230.4" y1="160.0" x2="158.7" y2="125.4" stroke="#ff4866" stroke-width="2.6" filter="url(#neonGlow)"/>
+  <line x1="128" y1="30" x2="128" y2="196" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.5"/>
+  <ellipse cx="128.0" cy="69.1" rx="10.9" ry="21.8" fill="url(#canopyGrad)" stroke="#ff4866" stroke-width="1.2" filter="url(#neonGlow)"/>
+  <ellipse cx="108.8" cy="224.0" rx="6.5" ry="4.5" fill="#ffb830" filter="url(#neonGlow)"/>
+  <ellipse cx="121.6" cy="224.0" rx="6.5" ry="4.5" fill="#ffb830" filter="url(#neonGlow)"/>
+  <ellipse cx="134.4" cy="224.0" rx="6.5" ry="4.5" fill="#ffb830" filter="url(#neonGlow)"/>
+  <ellipse cx="147.2" cy="224.0" rx="6.5" ry="4.5" fill="#ffb830" filter="url(#neonGlow)"/>
+</svg>
