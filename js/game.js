@@ -1,10 +1,10 @@
 // AETHERBREAKER: SINGULARITY — Core Game Loop, Wave Director, Combat Physics, HUD & FX Lab
 
-import { ProceduralAudioEngine } from './audio.js';
-import { SpacetimeGrid } from './grid.js';
-import { WebGLPostRenderer } from './renderer.js';
-import { SpriteAtlasManager } from './sprites.js';
-import { ARMapSystem } from './ar_map.js';
+import { ProceduralAudioEngine } from './audio.js?v=3d2';
+import { SpacetimeGrid } from './grid.js?v=3d2';
+import { WebGLPostRenderer } from './renderer.js?v=3d2';
+import { SpriteAtlasManager } from './sprites.js?v=3d2';
+import { ARMapSystem } from './ar_map.js?v=3d2';
 import {
   SHIP_CLASSES,
   UPGRADES,
@@ -14,7 +14,13 @@ import {
   generateLightningPoints,
   createEnemy,
   createBoss
-} from './entities.js';
+} from './entities.js?v=3d2';
+
+const PACING_PRESETS = [
+  { id: 'tactical', label: 'TACTICAL', scale: 0.72, desc: 'Readable 3D canyon dogfighting speed' },
+  { id: 'cinematic', label: 'CINEMATIC', scale: 0.54, desc: 'Deliberate tactical slow-cruise' },
+  { id: 'hyper', label: 'HYPER', scale: 1.0, desc: 'Classic high-speed arcade intensity' }
+];
 
 const PALETTES = [
   { gridBase: [0.09, 0.36, 0.72], gridHot: [0.18, 0.96, 1.0] },
@@ -58,14 +64,15 @@ class AetherbreakerGame {
     this.arMap = new ARMapSystem(this.width, this.height);
     this.audio = new ProceduralAudioEngine();
 
-    this.camModes = ['tactical_3d', 'chase_3d', 'cockpit_3d', 'topdown_25d'];
+    this.camModes = ['chase_3d', 'cockpit_3d', 'tactical_3d', 'topdown_25d'];
     this.camLabels = {
+      chase_3d: '3D CHASE POV',
+      cockpit_3d: '3D COCKPIT POV',
       tactical_3d: '3D TACTICAL',
-      chase_3d: '3D CHASE',
-      cockpit_3d: '3D COCKPIT',
       topdown_25d: '2.5D OVERHEAD'
     };
     this.camModeIdx = 0;
+    this.pacingIdx = 0;
     this.aimWorld = { x: this.width * 0.5, y: this.height * 0.3, z: 55 };
 
     // State
@@ -83,7 +90,7 @@ class AetherbreakerGame {
       elasticity: 1.0,
       aberration: 1.0,
       lensing: 1.2,
-      timeScale: 1.0,
+      timeScale: 0.82,
       clickBlackHole: false
     };
 
@@ -176,6 +183,7 @@ class AetherbreakerGame {
       topControls: $('topControls'),
       fxDrawer: $('fxDrawer'),
       btnCamMode: $('btnCamMode'),
+      btnPacing: $('btnPacing'),
       btnArSector: $('btnArSector'),
       btnLidar: $('btnLidar'),
       btnArCam: $('btnArCam'),
@@ -194,6 +202,7 @@ class AetherbreakerGame {
     $('btnOverMenu').addEventListener('click', () => this.returnToMenu());
 
     this.dom.btnCamMode.addEventListener('click', () => this.cycleCameraMode());
+    this.dom.btnPacing.addEventListener('click', () => this.cyclePacing());
     this.dom.btnArSector.addEventListener('click', () => this.cycleArSector());
     this.dom.btnLidar.addEventListener('click', () => this.triggerLidarScan());
     this.dom.btnArCam.addEventListener('click', () => this.toggleArCam());
@@ -385,6 +394,8 @@ class AetherbreakerGame {
       this.toggleAutoFire();
     } else if (e.code === 'KeyV') {
       this.cycleCameraMode();
+    } else if (e.code === 'KeyP') {
+      this.cyclePacing();
     } else if (e.code === 'KeyN') {
       this.cycleArSector();
     } else if (e.code === 'KeyL') {
@@ -422,6 +433,20 @@ class AetherbreakerGame {
     const label = this.camLabels[mode];
     this.dom.btnCamMode.innerHTML = `CAM: ${label} <kbd>V</kbd>`;
     this.addBanner(`CAMERA // ${label}`, '3D PERSPECTIVE VIEWPORT SHIFT', '#2cf5ff', 1.4);
+  }
+
+  cyclePacing() {
+    this.pacingIdx = (this.pacingIdx + 1) % PACING_PRESETS.length;
+    const preset = PACING_PRESETS[this.pacingIdx];
+    if (this.dom.btnPacing) {
+      this.dom.btnPacing.innerHTML = `PACE: ${preset.label} <kbd>P</kbd>`;
+    }
+    this.addBanner(
+      `PACING // ${preset.label} (${Math.round(preset.scale * 100)}%)`,
+      preset.desc.toUpperCase(),
+      '#2eff9f',
+      1.4
+    );
   }
 
   cycleArSector() {
@@ -508,6 +533,8 @@ class AetherbreakerGame {
       vy: 0,
       z: 55,
       vz: 0,
+      heading: -Math.PI * 0.5,
+      thrustSpeed: 150,
       angle: -Math.PI * 0.5,
       prevAngle: -Math.PI * 0.5,
       bank: 0,
@@ -595,7 +622,7 @@ class AetherbreakerGame {
     this.wave = waveNum;
     this.paletteIdx = Math.floor((waveNum - 1) / 2) % PALETTES.length;
     this.waveQueue = [];
-    this.spawnTimer = 0.5;
+    this.spawnTimer = 1.0;
 
     if (waveNum % 5 === 0) {
       const bossTier = ((waveNum / 5 - 1) % 3) + 1;
@@ -614,7 +641,7 @@ class AetherbreakerGame {
 
     this.addBanner(`WAVE ${waveNum}`, 'HOSTILE SIGNATURES DETECTED', '#2cf5ff', 2.1);
 
-    const count = 7 + waveNum * 3;
+    const count = 5 + waveNum * 2;
     const pool = ['swarmer'];
     if (waveNum >= 1) pool.push('lancer');
     if (waveNum >= 2) pool.push('weaver', 'splitter');
@@ -808,31 +835,50 @@ class AetherbreakerGame {
     const p = this.player;
     if (!p || p.dashCooldown > 0) return;
 
+    const camMode = this.camModes[this.camModeIdx];
+    const isPov = camMode === 'chase_3d' || camMode === 'cockpit_3d';
     let dx = 0;
     let dy = 0;
-    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) dy -= 1;
-    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) dy += 1;
-    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) dx -= 1;
-    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) dx += 1;
 
-    if (dx === 0 && dy === 0) {
-      dx = Math.cos(p.angle);
-      dy = Math.sin(p.angle);
-    } else {
-      const len = Math.hypot(dx, dy);
+    if (isPov) {
+      const h = p.heading ?? p.angle;
+      const fwd = (this.keys.has('KeyS') || this.keys.has('ArrowDown')) ? -0.55 : 1.0;
+      let strafe = 0;
+      if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) strafe -= 0.9;
+      if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) strafe += 0.9;
+      const ch = Math.cos(h);
+      const sh = Math.sin(h);
+      dx = ch * fwd - sh * strafe;
+      dy = sh * fwd + ch * strafe;
+      const len = Math.hypot(dx, dy) || 1;
       dx /= len;
       dy /= len;
+    } else {
+      if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) dy -= 1;
+      if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) dy += 1;
+      if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) dx -= 1;
+      if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) dx += 1;
+
+      if (dx === 0 && dy === 0) {
+        dx = Math.cos(p.angle);
+        dy = Math.sin(p.angle);
+      } else {
+        const len = Math.hypot(dx, dy);
+        dx /= len;
+        dy /= len;
+      }
     }
 
     const echoStacks = this.getUpgradeStacks('phase_echo');
     const cdMult = Math.pow(0.82, echoStacks);
+    const dashSpeed = isPov ? 720 : 820;
     p.dashCooldown = p.ship.dashCooldown * cdMult;
     p.dashTimer = 0.2;
     p.invuln = Math.max(p.invuln, 0.32);
     p.dashDirX = dx;
     p.dashDirY = dy;
-    p.vx = dx * 980;
-    p.vy = dy * 980;
+    p.vx = dx * dashSpeed;
+    p.vy = dy * dashSpeed;
 
     this.audio.playDash();
     this.grid.applyImpulse(p.x, p.y, 180, 26);
@@ -1166,8 +1212,9 @@ class AetherbreakerGame {
           10
         );
       }
-      this.grid.update(rawDt, audioEnergy.bass, this.fx.elasticity);
-      this.arMap.update(rawDt, [], [], () => {}, []);
+      const menuDt = rawDt * 0.6;
+      this.grid.update(menuDt, audioEnergy.bass, this.fx.elasticity);
+      this.arMap.update(menuDt, [], [], () => {}, []);
       this._renderScene(audioEnergy);
       this._clearHUD();
     } else if (this.state === 'PLAYING') {
@@ -1198,7 +1245,8 @@ class AetherbreakerGame {
       return;
     }
 
-    const baseDt = rawDt * this.fx.timeScale;
+    const pacing = PACING_PRESETS[this.pacingIdx].scale;
+    const baseDt = rawDt * this.fx.timeScale * pacing;
     let worldScale = 1.0;
     let playerScale = 1.0;
 
@@ -1262,12 +1310,40 @@ class AetherbreakerGame {
 
     const oc = this.getUpgradeStacks('overclock');
     const speed = p.ship.speed * (1 + oc * 0.1);
+    const camMode = this.camModes[this.camModeIdx];
+    const isPov = camMode === 'chase_3d' || camMode === 'cockpit_3d';
+    if (p.heading === undefined) p.heading = p.angle;
+    const prevHeading = p.heading;
 
     if (p.dashTimer > 0) {
       p.dashTimer -= dt;
       this.grid.applyDirectedForce(p.x, p.y, p.vx * 0.025, p.vy * 0.025, 95);
       this.checkBulletParry();
       p.trail.push({ x: p.x, y: p.y, z: p.z, alpha: 0.9 });
+    } else if (isPov) {
+      // Stable 3D POV Flight: A/D + gentle screen-edge mouse steer control flight heading (no feedback spin!)
+      let steer = 0;
+      if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) steer -= 1;
+      if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) steer += 1;
+
+      const normX = Math.max(-1, Math.min(1, (this.mouse.x / Math.max(1, this.width) - 0.5) * 2));
+      const mouseTurn = Math.abs(normX) > 0.22
+        ? Math.sign(normX) * ((Math.abs(normX) - 0.22) / 0.78) * 0.95
+        : 0;
+      p.heading += (steer * 2.15 + mouseTurn) * dt;
+
+      let throttleInput = 0;
+      if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) throttleInput += 1;
+      if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) throttleInput -= 1;
+      const targetSpeed = throttleInput > 0
+        ? speed * 1.24
+        : (throttleInput < 0 ? speed * 0.42 : speed * 0.74);
+      p.thrustSpeed = (p.thrustSpeed ?? speed * 0.74) + (targetSpeed - (p.thrustSpeed ?? speed * 0.74)) * Math.min(1, dt * 6.0);
+
+      const desVx = Math.cos(p.heading) * p.thrustSpeed;
+      const desVy = Math.sin(p.heading) * p.thrustSpeed;
+      p.vx += (desVx - p.vx) * Math.min(1, 8.5 * dt);
+      p.vy += (desVy - p.vy) * Math.min(1, 8.5 * dt);
     } else {
       let mx = 0;
       let my = 0;
@@ -1280,7 +1356,7 @@ class AetherbreakerGame {
         mx /= len;
         my /= len;
       }
-      const accel = 11.5;
+      const accel = 10.5;
       p.vx += (mx * speed - p.vx) * Math.min(1, accel * dt);
       p.vy += (my * speed - p.vy) * Math.min(1, accel * dt);
     }
@@ -1294,34 +1370,72 @@ class AetherbreakerGame {
     p.z += (targetZ - p.z) * Math.min(1, dt * 8.5);
     p.pitch = Math.max(-0.28, Math.min(0.28, (p.z - prevZ) * 0.35 + (p.dashTimer > 0 ? 0.14 : 0)));
 
-    const pad = 22;
-    if (p.x < pad) { p.x = pad; p.vx = Math.max(0, p.vx); }
-    if (p.x > this.width - pad) { p.x = this.width - pad; p.vx = Math.min(0, p.vx); }
-    if (p.y < pad) { p.y = pad; p.vy = Math.max(0, p.vy); }
-    if (p.y > this.height - pad) { p.y = this.height - pad; p.vy = Math.min(0, p.vy); }
+    // Solid 3D Perimeter Forcefield Boundaries
+    const pad = 36;
+    if (p.x < pad) { p.x = pad; p.vx = Math.max(0, p.vx); if (isPov && Math.cos(p.heading) < 0) p.heading = Math.PI - p.heading; }
+    if (p.x > this.width - pad) { p.x = this.width - pad; p.vx = Math.min(0, p.vx); if (isPov && Math.cos(p.heading) > 0) p.heading = Math.PI - p.heading; }
+    if (p.y < pad) { p.y = pad; p.vy = Math.max(0, p.vy); if (isPov && Math.sin(p.heading) < 0) p.heading = -p.heading; }
+    if (p.y > this.height - pad) { p.y = this.height - pad; p.vy = Math.min(0, p.vy); if (isPov && Math.sin(p.heading) > 0) p.heading = -p.heading; }
+
+    // Smooth 3D solid building hull deflection
+    this.arMap.resolveEntityCollision(p);
 
     p.prevAngle = p.angle;
-    p.angle = Math.atan2(this.aimWorld.y - p.y, this.aimWorld.x - p.x);
+    let aimTargetX = this.aimWorld.x;
+    let aimTargetY = this.aimWorld.y;
+
+    if (isPov) {
+      // Soft reticle snap onto enemies in forward hemisphere within 48px of cursor
+      let bestDist = 48;
+      for (const e of this.enemies) {
+        const scr = this.renderer.worldToScreen(e.x, e.y, e.z ?? 55);
+        if (!scr.visible) continue;
+        const dScr = Math.hypot(scr.x - this.mouse.x, scr.y - this.mouse.y);
+        if (dScr < bestDist) {
+          let rel = Math.atan2(e.y - p.y, e.x - p.x) - p.heading;
+          while (rel > Math.PI) rel -= Math.PI * 2;
+          while (rel < -Math.PI) rel += Math.PI * 2;
+          if (Math.abs(rel) <= 1.2) {
+            bestDist = dScr;
+            aimTargetX = e.x;
+            aimTargetY = e.y;
+          }
+        }
+      }
+      const rawAim = Math.atan2(aimTargetY - p.y, aimTargetX - p.x);
+      let gimbalDiff = rawAim - p.heading;
+      while (gimbalDiff > Math.PI) gimbalDiff -= Math.PI * 2;
+      while (gimbalDiff < -Math.PI) gimbalDiff += Math.PI * 2;
+      gimbalDiff = Math.max(-1.15, Math.min(1.15, gimbalDiff));
+      p.angle = p.heading + gimbalDiff;
+    } else {
+      p.angle = Math.atan2(aimTargetY - p.y, aimTargetX - p.x);
+      let hDiff = p.angle - p.heading;
+      while (hDiff > Math.PI) hDiff -= Math.PI * 2;
+      while (hDiff < -Math.PI) hDiff += Math.PI * 2;
+      p.heading += hDiff * Math.min(1, dt * 8.0);
+    }
 
     // 3D Roll Banking Inertia & Variable-Geometry Wing Sweep
-    let angDiff = p.angle - p.prevAngle;
+    const bodyAng = isPov ? p.heading : p.angle;
+    let angDiff = (isPov ? p.heading - prevHeading : p.angle - p.prevAngle);
     while (angDiff > Math.PI) angDiff -= Math.PI * 2;
     while (angDiff < -Math.PI) angDiff += Math.PI * 2;
     const turnRate = angDiff / Math.max(0.001, dt);
-    const latVel = -Math.sin(p.angle) * p.vx + Math.cos(p.angle) * p.vy;
-    const targetBank = Math.max(-1, Math.min(1, latVel / 280 + turnRate * 0.14));
+    const latVel = -Math.sin(bodyAng) * p.vx + Math.cos(bodyAng) * p.vy;
+    const targetBank = Math.max(-1, Math.min(1, isPov ? turnRate * 0.42 : (latVel / 240 + turnRate * 0.14)));
     p.bank += (targetBank - p.bank) * Math.min(1, dt * 11.0);
 
     const velMag = Math.hypot(p.vx, p.vy);
     p.throttle = Math.min(1.5, Math.max(0.18, velMag / speed));
-    const wantsSweep = p.dashTimer > 0 || p.novabeamTimer > 0 || velMag > speed * 0.72;
+    const wantsSweep = p.dashTimer > 0 || p.novabeamTimer > 0 || velMag > speed * 0.88;
     p.wingSweep += ((wantsSweep ? 1 : 0) - p.wingSweep) * Math.min(1, dt * 7.5);
     p.muzzleFlashTimer = Math.max(0, p.muzzleFlashTimer - dt);
 
     // Aerodynamic 3D Wingtip Contrail Vortex Ribbons
     const span = (p.ship.wingspan || 22) * (1 - Math.abs(p.bank) * 0.22) * (1 - p.wingSweep * 0.16);
     const aft = -4 - p.wingSweep * 10;
-    const ca = Math.cos(p.angle), sa = Math.sin(p.angle);
+    const ca = Math.cos(bodyAng), sa = Math.sin(bodyAng);
     const lx = p.x + ca * aft + sa * span;
     const ly = p.y + sa * aft - ca * span;
     const rx = p.x + ca * aft - sa * span;
@@ -1345,14 +1459,14 @@ class AetherbreakerGame {
 
     // Thruster exhaust particles
     if (velMag > 45 && Math.random() < 0.85) {
-      const bx = p.x - Math.cos(p.angle) * 16;
-      const by = p.y - Math.sin(p.angle) * 16;
+      const bx = p.x - Math.cos(bodyAng) * 16;
+      const by = p.y - Math.sin(bodyAng) * 16;
       this.particles.push({
         x: bx + (Math.random() - 0.5) * 6,
         y: by + (Math.random() - 0.5) * 6,
         z: p.z,
-        vx: -Math.cos(p.angle) * 120 + (Math.random() - 0.5) * 40,
-        vy: -Math.sin(p.angle) * 120 + (Math.random() - 0.5) * 40,
+        vx: -Math.cos(bodyAng) * 120 + (Math.random() - 0.5) * 40,
+        vy: -Math.sin(bodyAng) * 120 + (Math.random() - 0.5) * 40,
         vz: (Math.random() - 0.5) * 30,
         size: 5.5,
         r: p.ship.accent[0],
@@ -1688,7 +1802,7 @@ class AetherbreakerGame {
         else { sx = -30; sy = Math.random() * this.height; }
 
         this.enemies.push(createEnemy(type, sx, sy, this.wave));
-        this.spawnTimer = Math.max(0.24, 0.72 - this.wave * 0.03);
+        this.spawnTimer = Math.max(0.45, 1.08 - this.wave * 0.035);
       }
     } else if (this.enemies.length === 0) {
       if (this.selectedMode === 'boss_rush') {
@@ -1851,6 +1965,14 @@ class AetherbreakerGame {
       b.x += b.vx * dt;
       b.y += b.vy * dt;
 
+      // 3D solid building cover block (piercing rail/upgrades can punch through)
+      const hitBldg = this.arMap.checkBulletHit(b.x, b.y, b.z ?? 55);
+      if (hitBldg && b.pierce <= 0) {
+        this.spawnBurst(b.x, b.y, b.color, 5, 130, 4);
+        this.playerBullets.splice(i, 1);
+        continue;
+      }
+
       // Wall bounce or cull
       if (b.x < 0 || b.x > this.width || b.y < 0 || b.y > this.height) {
         if (b.bounces > 0) {
@@ -1950,8 +2072,8 @@ class AetherbreakerGame {
             e.timer = 0.65;
             e.vx = 0;
             e.vy = 0;
-            e.chargeVx = nx * 680;
-            e.chargeVy = ny * 680;
+            e.chargeVx = nx * 420;
+            e.chargeVy = ny * 420;
           }
         } else if (e.state === 'telegraph') {
           e.angle = Math.atan2(e.chargeVy, e.chargeVx);
@@ -2013,10 +2135,10 @@ class AetherbreakerGame {
         e.angle = e.aimAngle;
         e.locking = e.timer < 0.75;
         if (e.timer <= 0) {
-          e.timer = 2.6;
+          e.timer = 2.8;
           this.enemyBullets.push({
-            x: e.x, y: e.y, vx: Math.cos(e.aimAngle) * 520, vy: Math.sin(e.aimAngle) * 520,
-            radius: 6, color: [1.0, 0.3, 0.72], life: 3.0
+            x: e.x, y: e.y, vx: Math.cos(e.aimAngle) * 310, vy: Math.sin(e.aimAngle) * 310,
+            radius: 6, color: [1.0, 0.3, 0.72], life: 3.4
           });
         }
       } else if (e.type === 'carrier') {
@@ -2048,6 +2170,7 @@ class AetherbreakerGame {
 
       e.x += e.vx * dt;
       e.y += e.vy * dt;
+      this.arMap.resolveEntityCollision(e);
 
       // Contact collision with player
       if (Math.hypot(e.x - p.x, e.y - p.y) <= e.radius + p.radius) {
@@ -2132,8 +2255,8 @@ class AetherbreakerGame {
           const a = boss.spokeAngle + (k / arms) * Math.PI * 2;
           this.enemyBullets.push({
             x: boss.x, y: boss.y,
-            vx: Math.cos(a) * 235, vy: Math.sin(a) * 235,
-            radius: 6, color: k % 2 === 0 ? boss.color : boss.accent, life: 5.5
+            vx: Math.cos(a) * 165, vy: Math.sin(a) * 165,
+            radius: 6, color: k % 2 === 0 ? boss.color : boss.accent, life: 6.2
           });
         }
       }
@@ -2159,7 +2282,7 @@ class AetherbreakerGame {
       const weave = Math.sin(boss.timer * 3.2) * 1.4;
       boss.heading += (Math.max(-2.2, Math.min(2.2, diff)) + weave) * dt * 1.35;
 
-      const spd = 225 + boss.phase * 38;
+      const spd = 165 + boss.phase * 25;
       boss.x += Math.cos(boss.heading) * spd * dt;
       boss.y += Math.sin(boss.heading) * spd * dt;
       if (boss.x < 50 || boss.x > this.width - 50) boss.heading = Math.PI - boss.heading;
@@ -2194,8 +2317,8 @@ class AetherbreakerGame {
         const seg = boss.segments[Math.floor(Math.random() * boss.segments.length)];
         const a = Math.atan2(p.y - seg.y, p.x - seg.x);
         this.enemyBullets.push({
-          x: seg.x, y: seg.y, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260,
-          radius: 6, color: boss.accent, life: 5.0
+          x: seg.x, y: seg.y, vx: Math.cos(a) * 185, vy: Math.sin(a) * 185,
+          radius: 6, color: boss.accent, life: 5.8
         });
       }
     } else {
@@ -2227,8 +2350,8 @@ class AetherbreakerGame {
           const a = spin + (k / arms) * Math.PI * 2;
           this.enemyBullets.push({
             x: boss.x, y: boss.y,
-            vx: Math.cos(a) * 245, vy: Math.sin(a) * 245,
-            radius: 6.5, color: k % 2 === 0 ? boss.color : boss.accent, life: 5.5
+            vx: Math.cos(a) * 175, vy: Math.sin(a) * 175,
+            radius: 6.5, color: k % 2 === 0 ? boss.color : boss.accent, life: 6.2
           });
         }
       }
@@ -2248,6 +2371,12 @@ class AetherbreakerGame {
       b.y += b.vy * dt;
 
       if (b.life <= 0 || b.x < -40 || b.x > this.width + 40 || b.y < -40 || b.y > this.height + 40) {
+        this.enemyBullets.splice(i, 1);
+        continue;
+      }
+
+      if (this.arMap.checkBulletHit(b.x, b.y, b.z ?? 55)) {
+        this.spawnBurst(b.x, b.y, b.color, 4, 110, 4);
         this.enemyBullets.splice(i, 1);
         continue;
       }
@@ -2327,7 +2456,7 @@ class AetherbreakerGame {
     // 2. Deformable 3D Spacetime Grid & 3D Augmented Reality Map
     const palette = PALETTES[this.paletteIdx % PALETTES.length];
     this.grid.renderToBatch(r, palette, audioEnergy.bass);
-    this.arMap.render3D(r, this.time, audioEnergy);
+    this.arMap.render3D(r, this.time, audioEnergy, this.player);
 
     // 3. Weaver Laser Links (3D)
     const weavers = this.enemies.filter(e => e.type === 'weaver');
@@ -2462,55 +2591,61 @@ class AetherbreakerGame {
     const p = this.player;
     const c = p.ship.color;
     const ac = p.ship.accent;
+    const camMode = this.camModes[this.camModeIdx];
+    const isCockpit = camMode === 'cockpit_3d';
+    const bodyAng = (camMode === 'chase_3d' || isCockpit) ? (p.heading ?? p.angle) : p.angle;
     const swept = p.wingSweep > 0.5;
     const sprite = this.atlas.getPlayerSprite(p.ship.id, p.bank, swept);
     const abFrame = Math.floor(this.time * 28) % 4;
     const abSprite = this.atlas.getSprite(`afterburner_${abFrame}`);
 
-    // Phase Dash Ghost Afterimages
-    for (const tr of p.trail) {
-      r.drawSprite3D(sprite, tr.x, tr.y, tr.z ?? p.z, 62, 62, p.angle, p.pitch, p.bank, c[0], c[1], c[2], tr.alpha * 0.4, 0, true, 0.8, false);
-    }
-
     const alpha = p.invuln > 0 && Math.floor(this.time * 24) % 2 === 0 ? 0.48 : 1.0;
-
-    // Animated Shock-Diamond Afterburner Plumes
+    const cb = Math.cos(bodyAng), sb = Math.sin(bodyAng);
     const ca = Math.cos(p.angle), sa = Math.sin(p.angle);
-    const plumeScale = 0.55 + p.throttle * 0.65 + (p.dashTimer > 0 ? 0.75 : 0);
-    const nozzles = p.ship.nozzles || [-5, 5];
-    for (const nz of nozzles) {
-      const lx = -24 - plumeScale * 10;
-      const ly = nz * (1 - Math.abs(p.bank) * 0.25);
-      const ax = p.x + ca * lx - sa * ly;
-      const ay = p.y + sa * lx + ca * ly;
-      r.drawSprite3D(abSprite, ax, ay, p.z, 20, 30 * plumeScale, p.angle, p.pitch, p.bank, 1, 1, 1, 0.92 * alpha, 0, true, 0.85, false);
+
+    if (!isCockpit) {
+      // Phase Dash Ghost Afterimages
+      for (const tr of p.trail) {
+        r.drawSprite3D(sprite, tr.x, tr.y, tr.z ?? p.z, 62, 62, bodyAng, p.pitch, p.bank, c[0], c[1], c[2], tr.alpha * 0.4, 0, true, 0.8, false);
+      }
+
+      // Animated Shock-Diamond Afterburner Plumes
+      const plumeScale = 0.55 + p.throttle * 0.65 + (p.dashTimer > 0 ? 0.75 : 0);
+      const nozzles = p.ship.nozzles || [-5, 5];
+      for (const nz of nozzles) {
+        const lx = -24 - plumeScale * 10;
+        const ly = nz * (1 - Math.abs(p.bank) * 0.25);
+        const ax = p.x + cb * lx - sb * ly;
+        const ay = p.y + sb * lx + cb * ly;
+        r.drawSprite3D(abSprite, ax, ay, p.z, 20, 30 * plumeScale, bodyAng, p.pitch, p.bank, 1, 1, 1, 0.92 * alpha, 0, true, 0.85, false);
+      }
+
+      // 3D Textured Fighter Jet Airframe (yaw, pitch, roll-bank in true 3D perspective)
+      r.drawSprite3D(sprite, p.x, p.y, p.z, 62, 62, bodyAng, p.pitch, p.bank, 1, 1, 1, alpha, p.invuln > 0.5 ? 0.35 : 0, false, 0.75, false);
+
+      // 3D Volumetric Dorsal Canopy Crest Line
+      r.drawLine3D(
+        p.x + cb * 14, p.y + sb * 14, p.z + 9,
+        p.x - cb * 14, p.y - sb * 14, p.z + 5,
+        c[0], c[1], c[2], 0.55 * alpha, 1.8
+      );
+
+      // Supersonic Prandtl-Glauert Mach Vapor Cone during Phase Dash
+      if (p.dashTimer > 0) {
+        const mc = this.atlas.getSprite('mach_cone');
+        r.drawSprite3D(mc, p.x + cb * 6, p.y + sb * 6, p.z, 78, 72, bodyAng, p.pitch, p.bank, c[0], c[1], c[2], 0.85, 0, true, 0.8, false);
+      }
     }
 
-    // 3D Textured Fighter Jet Airframe (yaw, pitch, roll-bank in true 3D perspective)
-    r.drawSprite3D(sprite, p.x, p.y, p.z, 62, 62, p.angle, p.pitch, p.bank, 1, 1, 1, alpha, p.invuln > 0.5 ? 0.35 : 0, false, 0.75, false);
-
-    // 3D Volumetric Dorsal Canopy Crest Line
-    r.drawLine3D(
-      p.x + ca * 14, p.y + sa * 14, p.z + 9,
-      p.x - ca * 14, p.y - sa * 14, p.z + 5,
-      c[0], c[1], c[2], 0.55 * alpha, 1.8
-    );
-
-    // Wing Hardpoint Muzzle Flashes
+    // Wing / Nose Hardpoint Muzzle Flashes (oriented along gimbal aim)
     if (p.muzzleFlashTimer > 0) {
       const mf = this.atlas.getSprite('muzzle_flash');
       const fAlpha = p.muzzleFlashTimer / 0.075;
       [-11, 11].forEach(wy => {
-        const fx = p.x + ca * 22 - sa * wy;
-        const fy = p.y + sa * 22 + ca * wy;
+        const fx = p.x + ca * 26 - sa * wy;
+        const fy = p.y + sa * 26 + ca * wy;
         r.drawSprite3D(mf, fx, fy, p.z, 22, 22, p.angle, 0, 0, ac[0], ac[1], ac[2], fAlpha, 0, true, 0.9, true);
       });
-    }
-
-    // Supersonic Prandtl-Glauert Mach Vapor Cone during Phase Dash
-    if (p.dashTimer > 0) {
-      const mc = this.atlas.getSprite('mach_cone');
-      r.drawSprite3D(mc, p.x + ca * 6, p.y + sa * 6, p.z, 78, 72, p.angle, p.pitch, p.bank, c[0], c[1], c[2], 0.85, 0, true, 0.8, false);
     }
 
     // Entropy Aegis Shield Ring
@@ -2897,19 +3032,114 @@ class AetherbreakerGame {
     }
     ctx.restore();
 
-    // 5b. 3D Cockpit HUD Pitch Ladder when in Cockpit 3D view
-    if (this.camModes[this.camModeIdx] === 'cockpit_3d') {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(46, 255, 159, 0.35)';
-      ctx.lineWidth = 1.2;
+    // 5b. 3D POV Flight Vector, Gimbal Lead & Cockpit Fighter Avionics
+    const hudCamMode = this.camModes[this.camModeIdx];
+    const isPovHud = hudCamMode === 'chase_3d' || hudCamMode === 'cockpit_3d';
+    if (isPovHud && p) {
+      const hAng = p.heading ?? p.angle;
+      const fv = this.renderer.worldToScreen(p.x + Math.cos(hAng) * 290, p.y + Math.sin(hAng) * 290, p.z);
+      if (fv.visible) {
+        ctx.save();
+        // Forward velocity-vector aircraft symbol
+        ctx.strokeStyle = 'rgba(46, 255, 159, 0.72)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(fv.x, fv.y, 10, 0, Math.PI * 2);
+        ctx.moveTo(fv.x - 20, fv.y); ctx.lineTo(fv.x - 10, fv.y);
+        ctx.moveTo(fv.x + 10, fv.y); ctx.lineTo(fv.x + 20, fv.y);
+        ctx.moveTo(fv.x, fv.y - 10); ctx.lineTo(fv.x, fv.y - 17);
+        ctx.stroke();
+
+        // Dashed weapon gimbal lead line to cursor reticle
+        if (this.state === 'PLAYING') {
+          ctx.setLineDash([4, 5]);
+          ctx.strokeStyle = 'rgba(44, 245, 255, 0.36)';
+          ctx.lineWidth = 1.1;
+          ctx.beginPath();
+          ctx.moveTo(fv.x, fv.y);
+          ctx.lineTo(this.mouse.x, this.mouse.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.restore();
+      }
+
+      // Arena perimeter proximity alert
+      const wallDist = Math.min(p.x, this.width - p.x, p.y, this.height - p.y);
+      if (wallDist < 115 && Math.floor(this.time * 8) % 2 === 0) {
+        ctx.save();
+        ctx.font = '700 11px Orbitron, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = wallDist < 60 ? '#ff335f' : '#ffb830';
+        ctx.fillText('! PERIMETER FORCEFIELD !', this.width * 0.5, this.height * 0.22);
+        ctx.restore();
+      }
+    }
+
+    if (hudCamMode === 'cockpit_3d' && p) {
       const cx = this.width * 0.5;
       const cy = this.height * 0.5;
+      const hAng = p.heading ?? p.angle;
+      const deg = ((Math.round((hAng * 180) / Math.PI + 90) % 360) + 360) % 360;
+
+      ctx.save();
+      // Subtle translucent canopy arch & side structural struts
+      ctx.strokeStyle = 'rgba(44, 245, 255, 0.18)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, this.height * 0.92);
+      ctx.lineTo(this.width * 0.14, this.height * 0.26);
+      ctx.quadraticCurveTo(cx, this.height * 0.04, this.width * 0.86, this.height * 0.26);
+      ctx.lineTo(this.width, this.height * 0.92);
+      ctx.stroke();
+
+      // Top Heading Tape (000..359 deg)
+      const tapeY = 78;
+      ctx.strokeStyle = 'rgba(46, 255, 159, 0.45)';
+      ctx.fillStyle = 'rgba(46, 255, 159, 0.85)';
+      ctx.font = '700 10px Orbitron, monospace';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx - 140, tapeY);
+      ctx.lineTo(cx + 140, tapeY);
+      ctx.stroke();
+      for (let dOff = -45; dOff <= 45; dOff += 15) {
+        const tickDeg = (deg + dOff + 360) % 360;
+        const tx = cx + (dOff / 45) * 125;
+        ctx.beginPath();
+        ctx.moveTo(tx, tapeY);
+        ctx.lineTo(tx, tapeY + 6);
+        ctx.stroke();
+        const label = tickDeg === 0 ? 'N' : tickDeg === 90 ? 'E' : tickDeg === 180 ? 'S' : tickDeg === 270 ? 'W' : String(tickDeg).padStart(3, '0');
+        ctx.fillText(label, tx, tapeY - 5);
+      }
+      ctx.fillStyle = '#2eff9f';
+      ctx.fillText(`[ ${String(deg).padStart(3, '0')}° ]`, cx, tapeY + 20);
+
+      // Banked Artificial Horizon Pitch Ladder
+      ctx.save();
+      ctx.translate(cx, cy + (p.pitch || 0) * 90);
+      ctx.rotate(-(p.bank || 0) * 0.18);
+      ctx.strokeStyle = 'rgba(46, 255, 159, 0.36)';
+      ctx.lineWidth = 1.3;
       [-70, -35, 35, 70].forEach(dy => {
         ctx.beginPath();
-        ctx.moveTo(cx - 110, cy + dy); ctx.lineTo(cx - 60, cy + dy);
-        ctx.moveTo(cx + 60, cy + dy); ctx.lineTo(cx + 110, cy + dy);
+        ctx.moveTo(-110, dy); ctx.lineTo(-56, dy); ctx.lineTo(-56, dy + (dy > 0 ? -6 : 6));
+        ctx.moveTo(110, dy); ctx.lineTo(56, dy); ctx.lineTo(56, dy + (dy > 0 ? -6 : 6));
         ctx.stroke();
       });
+      ctx.restore();
+
+      // Left Airspeed (KTS) & Right Altitude (ALT) Tapes
+      const spdKts = Math.round(Math.hypot(p.vx, p.vy) * 1.45);
+      const altFt = Math.round((p.z || 55) * 3.2);
+      ctx.font = '700 11px Orbitron, monospace';
+      ctx.fillStyle = 'rgba(44, 245, 255, 0.85)';
+      ctx.textAlign = 'right';
+      ctx.fillText(`KTS ${String(spdKts).padStart(3, '0')}`, cx - 175, cy + 4);
+      ctx.textAlign = 'left';
+      ctx.fillText(`ALT ${String(altFt).padStart(3, '0')}`, cx + 175, cy + 4);
       ctx.restore();
     }
 

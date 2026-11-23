@@ -12,7 +12,7 @@ export const SHIP_CLASSES = [
     hex: '#2cf5ff',
     color: [0.17, 0.96, 1.0],
     accent: [1.0, 0.18, 0.74],
-    speed: 375,
+    speed: 260,
     maxHp: 100,
     dashCooldown: 1.05,
     fireRate: 0.125,
@@ -30,7 +30,7 @@ export const SHIP_CLASSES = [
     hex: '#4ca6ff',
     color: [0.3, 0.65, 1.0],
     accent: [1.0, 0.82, 0.18],
-    speed: 345,
+    speed: 245,
     maxHp: 95,
     dashCooldown: 1.25,
     fireRate: 0.21,
@@ -48,7 +48,7 @@ export const SHIP_CLASSES = [
     hex: '#b066ff',
     color: [0.7, 0.4, 1.0],
     accent: [0.18, 1.0, 0.65],
-    speed: 335,
+    speed: 235,
     maxHp: 90,
     dashCooldown: 1.25,
     fireRate: 0.34,
@@ -66,7 +66,7 @@ export const SHIP_CLASSES = [
     hex: '#ff4866',
     color: [1.0, 0.28, 0.4],
     accent: [1.0, 0.72, 0.15],
-    speed: 355,
+    speed: 250,
     maxHp: 110,
     dashCooldown: 1.2,
     fireRate: 0.24,
@@ -341,56 +341,56 @@ export function createEnemy(type, x, y, wave = 1) {
     case 'swarmer':
       return {
         type, x, y, z: 46, bank: 0, pitch: 0, vx: 0, vy: 0, angle: Math.random() * Math.PI * 2,
-        radius: 13, hp: 22 * hpMult, maxHp: 22 * hpMult, speed: 205 + wave * 3,
+        radius: 13, hp: 22 * hpMult, maxHp: 22 * hpMult, speed: 118 + wave * 2,
         color: [1.0, 0.2, 0.36], score: 60, contactDmg: 12,
         timer: Math.random() * 2, phase: 0
       };
     case 'lancer':
       return {
         type, x, y, z: 54, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
-        radius: 17, hp: 46 * hpMult, maxHp: 46 * hpMult, speed: 155,
+        radius: 17, hp: 46 * hpMult, maxHp: 46 * hpMult, speed: 100,
         color: [1.0, 0.72, 0.14], score: 130, contactDmg: 18,
         timer: 1.0 + Math.random(), state: 'seek', chargeVx: 0, chargeVy: 0
       };
     case 'weaver':
       return {
         type, x, y, z: 56, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
-        radius: 15, hp: 58 * hpMult, maxHp: 58 * hpMult, speed: 120,
+        radius: 15, hp: 58 * hpMult, maxHp: 58 * hpMult, speed: 82,
         color: [0.16, 1.0, 0.62], score: 150, contactDmg: 14,
         timer: Math.random() * 4, orbitAngle: Math.random() * Math.PI * 2
       };
     case 'aegis':
       return {
         type, x, y, z: 52, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0, shieldAngle: Math.random() * Math.PI * 2,
-        radius: 22, hp: 95 * hpMult, maxHp: 95 * hpMult, speed: 95,
+        radius: 22, hp: 95 * hpMult, maxHp: 95 * hpMult, speed: 68,
         color: [0.18, 0.94, 1.0], score: 200, contactDmg: 18,
         timer: 0
       };
     case 'splitter':
       return {
         type, x, y, z: 58, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
-        radius: 23, hp: 82 * hpMult, maxHp: 82 * hpMult, speed: 112,
+        radius: 23, hp: 82 * hpMult, maxHp: 82 * hpMult, speed: 78,
         color: [0.72, 0.3, 1.0], score: 190, contactDmg: 16,
         timer: 0, isMini: false
       };
     case 'mini_splitter':
       return {
         type: 'splitter', x, y, z: 48, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
-        radius: 11, hp: 20 * hpMult, maxHp: 20 * hpMult, speed: 230,
+        radius: 11, hp: 20 * hpMult, maxHp: 20 * hpMult, speed: 140,
         color: [0.85, 0.45, 1.0], score: 50, contactDmg: 10,
         timer: 0, isMini: true
       };
     case 'gravity_mine':
       return {
         type, x, y, z: 50, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
-        radius: 21, hp: 70 * hpMult, maxHp: 70 * hpMult, speed: 62,
+        radius: 21, hp: 70 * hpMult, maxHp: 70 * hpMult, speed: 44,
         color: [0.88, 0.18, 1.0], score: 170, contactDmg: 22,
         timer: 0
       };
     case 'prism_sniper':
       return {
         type, x, y, z: 62, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
-        radius: 16, hp: 52 * hpMult, maxHp: 52 * hpMult, speed: 108,
+        radius: 16, hp: 52 * hpMult, maxHp: 52 * hpMult, speed: 76,
         color: [1.0, 0.35, 0.68], score: 175, contactDmg: 12,
         timer: 1.6 + Math.random(), aimAngle: 0, locking: false
       };
@@ -398,7 +398,7 @@ export function createEnemy(type, x, y, wave = 1) {
     default:
       return {
         type: 'carrier', x, y, z: 68, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
-        radius: 30, hp: 195 * hpMult, maxHp: 195 * hpMult, speed: 68,
+        radius: 30, hp: 195 * hpMult, maxHp: 195 * hpMult, speed: 50,
         color: [1.0, 0.56, 0.14], score: 340, contactDmg: 22,
         timer: 1.2
       };
