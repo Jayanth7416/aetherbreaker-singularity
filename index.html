@@ -8,13 +8,26 @@
 </head>
 <body>
   <div id="gameContainer">
+    <video id="arVideo" autoplay playsinline muted class="hidden"></video>
     <canvas id="glCanvas"></canvas>
     <canvas id="hudCanvas"></canvas>
 
     <!-- In-Game Top-Right Quick Controls -->
     <div id="topControls" class="hidden">
+      <button id="btnCamMode" class="hud-btn active" title="Cycle 3D Camera Mode [V]">
+        CAM: 3D TACTICAL <kbd>V</kbd>
+      </button>
+      <button id="btnArSector" class="hud-btn" title="Switch 3D AR Sector Map [N]">
+        SECTOR: NEO-TOKYO <kbd>N</kbd>
+      </button>
+      <button id="btnLidar" class="hud-btn" title="Trigger 3D AR LiDAR Scan [L]">
+        LIDAR <kbd>L</kbd>
+      </button>
+      <button id="btnArCam" class="hud-btn" title="Toggle Live Camera / LiDAR AR Passthrough [R]">
+        AR CAM <kbd>R</kbd>
+      </button>
       <button id="btnAutoFire" class="hud-btn" title="Toggle Auto-Fire [C]">
-        <span class="dot"></span> AUTO-FIRE <kbd>C</kbd>
+        <span class="dot"></span> AUTO <kbd>C</kbd>
       </button>
       <button id="btnFxLab" class="hud-btn" title="Open FX & Physics Lab [TAB]">
         FX LAB <kbd>TAB</kbd>
@@ -60,9 +73,13 @@
         </div>
       </div>
 
-      <div class="lab-divider">SANDBOX TRIGGERS</div>
+      <div class="lab-divider">3D AR &amp; SANDBOX TRIGGERS</div>
       <div class="lab-actions">
         <button id="btnToggleClickBH" class="lab-btn toggle-btn">Click = Black Hole: OFF</button>
+        <button id="btnLabLidar" class="lab-btn">3D LiDAR Scan [L]</button>
+        <button id="btnLabBeacon" class="lab-btn">Deploy AR Beacon [B]</button>
+        <button id="btnLabSector" class="lab-btn">Next AR Sector [N]</button>
+        <button id="btnLabCam" class="lab-btn">Cycle 3D Cam [V]</button>
         <button id="btnSpawnBH" class="lab-btn">Spawn Singularity</button>
         <button id="btnTriggerNova" class="lab-btn">Grid Supernova</button>
         <button id="btnMaxOverdrive" class="lab-btn">Fill Overdrive [E]</button>
@@ -103,11 +120,16 @@
             INITIATE BREACH
           </button>
           <div class="controls-strip">
-            <span><kbd>W A S D</kbd> Thrust</span>
+            <span><kbd>W A S D</kbd> 3D Flight</span>
             <span><kbd>LMB</kbd> / <kbd>C</kbd> Fire &amp; Auto</span>
             <span><kbd>SPACE</kbd> Phase Dash &amp; Parry</span>
             <span><kbd>RMB</kbd> / <kbd>Q</kbd> Singularity Well</span>
-            <span><kbd>E</kbd> / <kbd>F</kbd> Novabeam Overdrive</span>
+            <span><kbd>E</kbd> / <kbd>F</kbd> Novabeam</span>
+            <span><kbd>V</kbd> 3D Cam</span>
+            <span><kbd>N</kbd> AR Sector</span>
+            <span><kbd>L</kbd> LiDAR</span>
+            <span><kbd>B</kbd> AR Beacon</span>
+            <span><kbd>R</kbd> AR Cam</span>
             <span><kbd>TAB</kbd> FX Lab</span>
           </div>
         </div>

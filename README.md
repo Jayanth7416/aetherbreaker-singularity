@@ -23,10 +23,14 @@ A zero-dependency **WebGL2 HDR Cyber-Cosmic Aerial Roguelite & Spacetime Physics
   - `MiG-X Interceptor` (`Swarmer`), `Su-57 Viper` (`Lancer`), `RQ-9 Laser Relay` (`Weaver`), `AH-88 Gunship` (`Aegis`), `XB-70 Carrier Wing` (`Splitter`), `V-22 Singularity Tilt-Rotor` (`Gravity Mine`), `F-117 Rail-Jet` (`Prism Sniper`), and `C-5 Airborne Carrier` (`Carrier`).
   - Bosses: **Archon Sky-Fortress** (Wave 5), **Seraphim Sky-Leviathan 12-Ship Convoy** (Wave 10), and **Omega Valkyrie Orbital Mothership** (Wave 15+).
 
-### 2. Multi-Pass WebGL2 HDR Shader Engine (`js/renderer.js`)
-- **Scene Pass**: Alpha-blended metallic aircraft + additive Gaussian-core neon vectors + 16,384 velocity-stretched instanced particles.
-- **4-Pass Separable HDR Bloom**: Soft-knee bright extraction + dual ping-pong Gaussian blur framebuffers.
-- **Relativistic Composite Pass**: Real-time Schwarzschild gravitational lensing around active Black Hole Singularities, refractive shockwave rings, trauma-driven radial chromatic aberration, and Bullet-Time indigo edge grading.
+### 2. Full 3D Perspective WebGL2 HDR Engine & 4 Camera Modes (`js/renderer.js`)
+- **True 3D Perspective Projection**: 3D oriented fighter jets (yaw, pitch, and 3D roll-banking), volumetric altitude shadows/tethers, 3D raycast cursor aiming, and 4 switchable 3D camera angles (`3D TACTICAL`, `3D CHASE`, `3D COCKPIT`, `2.5D OVERHEAD` via `V`).
+- **4-Pass Separable HDR Bloom & Gravitational Lensing**: Soft-knee bright extraction, ping-pong Gaussian blur, real-time Schwarzschild gravitational lensing around active Black Hole Singularities, refractive shockwave rings, and Bullet-Time indigo edge grading.
+
+### 3. 3D Augmented Reality (AR) Tactical Map (`js/ar_map.js`)
+- **4 3D Extruded AR Geo-Sectors (`N`)**: *Neo-Tokyo LiDAR Grid*, *Valkyrie Canyon Trench*, *Manhattan Singularity Nexus*, and *Orbital Citadel* — complete with physics-reactive 3D holographic skyscrapers, rooftop beacons, and canyon mesas.
+- **3D LiDAR Terrain Scan (`L`) & Deployable AR Defense Pylons (`B`)**: Sweeps a 3D cylindrical LiDAR ring across the map, illuminates buildings, tags hostiles with 3D AR bounding-box telemetry (`ALT / DST`), and deploys autonomous AR arc-defense pylons.
+- **Live Camera / Synthetic LiDAR AR Passthrough (`R`) + 3D Holo-Minimap**: Stream live webcam passthrough behind the transparent WebGL2 canvas (`getUserMedia`) or toggle the synthetic night-vision LiDAR AR feed alongside a rotating 3D isometric radar minimap.
 
 ### 3. Deformable Relativistic Spacetime Grid (`js/grid.js`)
 - 64×38 Hooke's Law 3D spring-mass mesh that ripples from explosions, warps into black holes, wakes behind supersonic jets, and pulses to live bass energy.
@@ -45,6 +49,11 @@ A zero-dependency **WebGL2 HDR Cyber-Cosmic Aerial Roguelite & Spacetime Physics
 | `Space` / `Shift` | **Phase Dash & Chrono-Parry** (dash near enemy bullets to trigger Bullet-Time & shockwave) |
 | `Right Click` / `Q` | **Singularity Well** (spawns a gravitational lensing Black Hole) |
 | `E` / `F` | **Overdrive: Aether Novabeam** (at 100% Overdrive) |
+| `V` | Cycle **3D Camera Angle** (`3D TACTICAL`, `3D CHASE`, `3D COCKPIT`, `2.5D OVERHEAD`) |
+| `N` | Switch **3D AR Sector Map** (*Neo-Tokyo*, *Canyon*, *Manhattan*, *Orbital Citadel*) |
+| `L` | Trigger **3D LiDAR Terrain & Target Scan** |
+| `B` | Deploy **3D AR Defense Beacon** at crosshair |
+| `R` | Toggle **Live Camera / Synthetic LiDAR AR Passthrough** |
 | `TAB` | Toggle live **FX & Physics Lab** shader/sandbox drawer |
 | `1` / `2` / `3` | Draft Roguelite Augmentation Cores |
 | `M` / `ESC` | Mute Audio / Pause |

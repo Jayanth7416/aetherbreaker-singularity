@@ -1,7 +1,7 @@
-// Deformable Relativistic Spring-Mass Spacetime Grid
+// Deformable Relativistic 3D Spring-Mass Spacetime Grid
 
 export class SpacetimeGrid {
-  constructor(width, height, cols = 64, rows = 38) {
+  constructor(width, height, cols = 58, rows = 34) {
     this.width = width;
     this.height = height;
     this.cols = cols;
@@ -27,8 +27,8 @@ export class SpacetimeGrid {
   resize(width, height, reset = false) {
     this.width = Math.max(1, width);
     this.height = Math.max(1, height);
-    const padX = 28;
-    const padY = 28;
+    const padX = 44;
+    const padY = 44;
     const spanX = this.width + padX * 2;
     const spanY = this.height + padY * 2;
 
@@ -65,7 +65,8 @@ export class SpacetimeGrid {
         const str = force * falloff * falloff;
         this.vx[i] += (dx / d) * str;
         this.vy[i] += (dy / d) * str;
-        this.vz[i] -= str * 1.45;
+        // Ripple wave in Z
+        this.vz[i] -= str * 1.85;
       }
     }
   }
@@ -82,10 +83,10 @@ export class SpacetimeGrid {
         const str = force * falloff;
         const nx = dx / d;
         const ny = dy / d;
-        // Pull inward + subtle orbital vortex swirl
+        // Pull inward + orbital swirl + deep relativistic gravity funnel (-Z down)
         this.vx[i] += (nx - ny * 0.42) * str;
         this.vy[i] += (ny + nx * 0.42) * str;
-        this.vz[i] += str * 1.35;
+        this.vz[i] -= str * 2.6;
       }
     }
   }
@@ -101,7 +102,7 @@ export class SpacetimeGrid {
         const w = falloff * falloff;
         this.vx[i] += fx * w;
         this.vy[i] += fy * w;
-        this.vz[i] -= (Math.abs(fx) + Math.abs(fy)) * 0.35 * w;
+        this.vz[i] -= (Math.abs(fx) + Math.abs(fy)) * 0.45 * w;
       }
     }
   }
@@ -114,36 +115,31 @@ export class SpacetimeGrid {
     const cols = this.cols;
     const rows = this.rows;
 
-    // Subtle perimeter beat pulse
     if (audioBassEnergy > 0.35) {
-      const pulse = (audioBassEnergy - 0.35) * 2.2 * step;
+      const pulse = (audioBassEnergy - 0.35) * 2.5 * step;
       for (let c = 0; c < cols; c++) {
-        this.vz[c] -= pulse;
-        this.vz[(rows - 1) * cols + c] -= pulse;
+        this.vz[c] += pulse;
+        this.vz[(rows - 1) * cols + c] += pulse;
       }
       for (let r = 0; r < rows; r++) {
-        this.vz[r * cols] -= pulse;
-        this.vz[r * cols + (cols - 1)] -= pulse;
+        this.vz[r * cols] += pulse;
+        this.vz[r * cols + (cols - 1)] += pulse;
       }
     }
 
-    // Spring force accumulation
     for (let r = 0; r < rows; r++) {
       const rowOffset = r * cols;
       for (let c = 0; c < cols; c++) {
         const i = rowOffset + c;
-        // Anchor pull back to rest coordinates
         let ax = (this.rx[i] - this.x[i]) * ak;
         let ay = (this.ry[i] - this.y[i]) * ak;
         let az = -this.z[i] * ak * 1.4;
 
-        // Pin perimeter tightly so edges stay clean
         if (r === 0 || r === rows - 1 || c === 0 || c === cols - 1) {
           ax *= 4.0;
           ay *= 4.0;
         }
 
-        // 4-neighbor structural springs (using rest delta preservation)
         if (c > 0) {
           const left = i - 1;
           const restDx = this.rx[i] - this.rx[left];
@@ -179,76 +175,61 @@ export class SpacetimeGrid {
       }
     }
 
-    // Integrate positions with safety clamp
     for (let i = 0; i < this.count; i++) {
       this.x[i] += this.vx[i] * step;
       this.y[i] += this.vy[i] * step;
       this.z[i] += this.vz[i] * step;
 
-      // Clamp extreme stretches for numerical stability
       const dx = this.x[i] - this.rx[i];
       const dy = this.y[i] - this.ry[i];
       if (dx > 130) this.x[i] = this.rx[i] + 130;
       else if (dx < -130) this.x[i] = this.rx[i] - 130;
       if (dy > 130) this.y[i] = this.ry[i] + 130;
       else if (dy < -130) this.y[i] = this.ry[i] - 130;
-      if (this.z[i] > 140) this.z[i] = 140;
-      else if (this.z[i] < -140) this.z[i] = -140;
+      if (this.z[i] > 180) this.z[i] = 180;
+      else if (this.z[i] < -220) this.z[i] = -220;
     }
   }
 
   renderToBatch(renderer, palette, audioBass = 0) {
     const cols = this.cols;
     const rows = this.rows;
-    const cx = this.width * 0.5;
-    const cy = this.height * 0.5;
-
     const baseR = palette.gridBase[0];
     const baseG = palette.gridBase[1];
     const baseB = palette.gridBase[2];
     const hotR = palette.gridHot[0];
     const hotG = palette.gridHot[1];
     const hotB = palette.gridHot[2];
-
     const beatBoost = audioBass * 0.22;
 
     for (let r = 0; r < rows; r++) {
       const rowOff = r * cols;
       for (let c = 0; c < cols; c++) {
         const i = rowOff + c;
-        const zi = this.z[i];
-        const px1 = this.x[i] + (this.x[i] - cx) * zi * 0.0018;
-        const py1 = this.y[i] + (this.y[i] - cy) * zi * 0.0018;
+        const x1 = this.x[i], y1 = this.y[i], z1 = this.z[i];
 
-        const disp = Math.abs(this.x[i] - this.rx[i]) + Math.abs(this.y[i] - this.ry[i]) + Math.abs(zi) * 0.7;
+        const disp = Math.abs(x1 - this.rx[i]) + Math.abs(y1 - this.ry[i]) + Math.abs(z1) * 0.85;
         const speed = Math.abs(this.vx[i]) + Math.abs(this.vy[i]) + Math.abs(this.vz[i]);
-        const energy = Math.min(1.0, disp * 0.015 + speed * 0.04 + beatBoost);
+        const energy = Math.min(1.0, disp * 0.013 + speed * 0.036 + beatBoost);
 
         const cr = baseR + (hotR - baseR) * energy;
         const cg = baseG + (hotG - baseG) * energy;
         const cb = baseB + (hotB - baseB) * energy;
-        const alpha = 0.14 + energy * 0.68;
-        const thick = 1.2 + energy * 1.9;
+        const alpha = 0.16 + energy * 0.68;
+        const thick = 1.2 + energy * 2.0;
 
         if (c < cols - 1) {
           const j = i + 1;
-          const zj = this.z[j];
-          const px2 = this.x[j] + (this.x[j] - cx) * zj * 0.0018;
-          const py2 = this.y[j] + (this.y[j] - cy) * zj * 0.0018;
-          renderer.drawLine(px1, py1, px2, py2, cr, cg, cb, alpha, thick);
+          renderer.drawLine3D(x1, y1, z1, this.x[j], this.y[j], this.z[j], cr, cg, cb, alpha, thick);
         }
 
         if (r < rows - 1) {
           const k = i + cols;
-          const zk = this.z[k];
-          const px2 = this.x[k] + (this.x[k] - cx) * zk * 0.0018;
-          const py2 = this.y[k] + (this.y[k] - cy) * zk * 0.0018;
-          renderer.drawLine(px1, py1, px2, py2, cr, cg, cb, alpha, thick);
+          renderer.drawLine3D(x1, y1, z1, this.x[k], this.y[k], this.z[k], cr, cg, cb, alpha, thick);
         }
 
-        // Glowing intersection nodes when deformed or pulsing
         if (energy > 0.34 && ((r + c) & 1) === 0) {
-          renderer.drawParticle(px1, py1, 3.2 + energy * 4.5, cr, cg, cb, energy * 0.75, 0, 0, 0);
+          renderer.drawParticle3D(x1, y1, z1, 4.0 + energy * 5.0, cr, cg, cb, energy * 0.75, 0, 0, 0, 0);
         }
       }
     }

@@ -4,6 +4,7 @@ import { ProceduralAudioEngine } from './audio.js';
 import { SpacetimeGrid } from './grid.js';
 import { WebGLPostRenderer } from './renderer.js';
 import { SpriteAtlasManager } from './sprites.js';
+import { ARMapSystem } from './ar_map.js';
 import {
   SHIP_CLASSES,
   UPGRADES,
@@ -53,8 +54,19 @@ class AetherbreakerGame {
     this.renderer = new WebGLPostRenderer(this.glCanvas);
     this.atlas = new SpriteAtlasManager(canvas => this.renderer.setSpriteAtlas(canvas));
     this.renderer.setSpriteAtlas(this.atlas.canvas);
-    this.grid = new SpacetimeGrid(this.width, this.height, 64, 38);
+    this.grid = new SpacetimeGrid(this.width, this.height, 58, 34);
+    this.arMap = new ARMapSystem(this.width, this.height);
     this.audio = new ProceduralAudioEngine();
+
+    this.camModes = ['tactical_3d', 'chase_3d', 'cockpit_3d', 'topdown_25d'];
+    this.camLabels = {
+      tactical_3d: '3D TACTICAL',
+      chase_3d: '3D CHASE',
+      cockpit_3d: '3D COCKPIT',
+      topdown_25d: '2.5D OVERHEAD'
+    };
+    this.camModeIdx = 0;
+    this.aimWorld = { x: this.width * 0.5, y: this.height * 0.3, z: 55 };
 
     // State
     this.state = 'MENU'; // MENU | PLAYING | UPGRADE | PAUSED | GAMEOVER
@@ -149,18 +161,24 @@ class AetherbreakerGame {
     this.hudCanvas.height = Math.floor(this.height * this.dpr);
     this.renderer.resize(this.width, this.height);
     this.grid.resize(this.width, this.height, this.state === 'MENU');
+    this.arMap.resize(this.width, this.height);
   }
 
   _bindDOM() {
     const $ = id => document.getElementById(id);
 
     this.dom = {
+      arVideo: $('arVideo'),
       menuOverlay: $('menuOverlay'),
       upgradeModal: $('upgradeModal'),
       pauseOverlay: $('pauseOverlay'),
       gameOverOverlay: $('gameOverOverlay'),
       topControls: $('topControls'),
       fxDrawer: $('fxDrawer'),
+      btnCamMode: $('btnCamMode'),
+      btnArSector: $('btnArSector'),
+      btnLidar: $('btnLidar'),
+      btnArCam: $('btnArCam'),
       btnAutoFire: $('btnAutoFire'),
       btnFxLab: $('btnFxLab'),
       btnMute: $('btnMute'),
@@ -175,11 +193,20 @@ class AetherbreakerGame {
     $('btnRetryRun').addEventListener('click', () => this.startRun());
     $('btnOverMenu').addEventListener('click', () => this.returnToMenu());
 
+    this.dom.btnCamMode.addEventListener('click', () => this.cycleCameraMode());
+    this.dom.btnArSector.addEventListener('click', () => this.cycleArSector());
+    this.dom.btnLidar.addEventListener('click', () => this.triggerLidarScan());
+    this.dom.btnArCam.addEventListener('click', () => this.toggleArCam());
     this.dom.btnAutoFire.addEventListener('click', () => this.toggleAutoFire());
     this.dom.btnFxLab.addEventListener('click', () => this.toggleFxDrawer());
     $('btnCloseFx').addEventListener('click', () => this.toggleFxDrawer(false));
     this.dom.btnMute.addEventListener('click', () => this.toggleMute());
     this.dom.btnPause.addEventListener('click', () => this.togglePause());
+
+    $('btnLabLidar').addEventListener('click', () => this.triggerLidarScan());
+    $('btnLabBeacon').addEventListener('click', () => this.deployArBeacon());
+    $('btnLabSector').addEventListener('click', () => this.cycleArSector());
+    $('btnLabCam').addEventListener('click', () => this.cycleCameraMode());
 
     // FX Lab sliders
     const bindSlider = (sliderId, valId, key) => {
@@ -356,6 +383,16 @@ class AetherbreakerGame {
       this.tryOverdrive();
     } else if (e.code === 'KeyC') {
       this.toggleAutoFire();
+    } else if (e.code === 'KeyV') {
+      this.cycleCameraMode();
+    } else if (e.code === 'KeyN') {
+      this.cycleArSector();
+    } else if (e.code === 'KeyL') {
+      this.triggerLidarScan();
+    } else if (e.code === 'KeyR') {
+      this.toggleArCam();
+    } else if (e.code === 'KeyB') {
+      this.deployArBeacon();
     }
   }
 
@@ -365,9 +402,10 @@ class AetherbreakerGame {
 
     this.audio.init();
     if (this.state === 'PLAYING') {
+      const wPt = this.renderer.screenToWorldPlane(e.clientX, e.clientY, this.player ? this.player.z : 55);
       if (e.button === 0) {
         if (this.fx.clickBlackHole) {
-          this.spawnSingularity(e.clientX, e.clientY, true);
+          this.spawnSingularity(wPt.x, wPt.y, true);
           return;
         }
         this.mouse.left = true;
@@ -376,6 +414,44 @@ class AetherbreakerGame {
         this.trySingularityWell();
       }
     }
+  }
+
+  cycleCameraMode() {
+    this.camModeIdx = (this.camModeIdx + 1) % this.camModes.length;
+    const mode = this.camModes[this.camModeIdx];
+    const label = this.camLabels[mode];
+    this.dom.btnCamMode.innerHTML = `CAM: ${label} <kbd>V</kbd>`;
+    this.addBanner(`CAMERA // ${label}`, '3D PERSPECTIVE VIEWPORT SHIFT', '#2cf5ff', 1.4);
+  }
+
+  cycleArSector() {
+    const sec = this.arMap.cycleSector();
+    this.dom.btnArSector.innerHTML = `SECTOR: ${sec.shortName} <kbd>N</kbd>`;
+    this.addBanner(sec.name, '3D AUGMENTED REALITY TOPOLOGY LOADED', '#2eff9f', 1.8);
+  }
+
+  triggerLidarScan() {
+    if (!this.player) return;
+    this.arMap.triggerLidarScan(this.player.x, this.player.y);
+    this.audio.playParry();
+    this.addFloatingText(this.player.x, this.player.y - 30, '3D LIDAR SWEEP!', '#2eff9f', 15, this.player.z + 20);
+  }
+
+  deployArBeacon() {
+    if (this.state !== 'PLAYING') return;
+    const tx = Math.max(40, Math.min(this.width - 40, this.aimWorld.x));
+    const ty = Math.max(40, Math.min(this.height - 40, this.aimWorld.y));
+    this.arMap.deployArBeacon(tx, ty);
+    this.audio.playLevelUp();
+    this.addFloatingText(tx, ty - 20, 'AR PYLON DEPLOYED', '#2cf5ff', 14, 70);
+  }
+
+  async toggleArCam() {
+    const res = await this.arMap.toggleCameraAR(this.dom.arVideo);
+    const active = res.mode !== 'off';
+    this.dom.btnArCam.classList.toggle('active', active);
+    this.dom.btnArCam.innerHTML = `AR: ${res.mode.toUpperCase()} <kbd>R</kbd>`;
+    this.addBanner(res.message, 'AUGMENTED REALITY OVERLAY', '#2eff9f', 1.9);
   }
 
   toggleAutoFire() {
@@ -430,9 +506,12 @@ class AetherbreakerGame {
       y: this.height * 0.65,
       vx: 0,
       vy: 0,
+      z: 55,
+      vz: 0,
       angle: -Math.PI * 0.5,
       prevAngle: -Math.PI * 0.5,
       bank: 0,
+      pitch: 0,
       wingSweep: 0,
       throttle: 0.25,
       muzzleFlashTimer: 0,
@@ -676,11 +755,12 @@ class AetherbreakerGame {
     this.banner = { text, sub, color, timer: duration, maxTimer: duration };
   }
 
-  addFloatingText(x, y, text, color = '#ffffff', size = 14) {
+  addFloatingText(x, y, text, color = '#ffffff', size = 14, z = 58) {
     if (this.floatingTexts.length > 65) this.floatingTexts.shift();
     this.floatingTexts.push({
       x,
       y,
+      z,
       vx: (Math.random() - 0.5) * 45,
       vy: -55 - Math.random() * 25,
       text,
@@ -691,15 +771,15 @@ class AetherbreakerGame {
     });
   }
 
-  addShockwave(x, y, maxRadius, color = [0.2, 0.95, 1.0], thickness = 24) {
+  addShockwave(x, y, maxRadius, color = [0.2, 0.95, 1.0], thickness = 24, z = 35) {
     if (this.shockwaves.length < 16) {
       this.shockwaves.push({
-        x, y, radius: 12, maxRadius, thickness, color, life: 0.55, maxLife: 0.55
+        x, y, z, radius: 12, maxRadius, thickness, color, life: 0.55, maxLife: 0.55
       });
     }
   }
 
-  spawnBurst(x, y, color, count = 24, speed = 260, size = 7) {
+  spawnBurst(x, y, color, count = 24, speed = 260, size = 7, z = 55) {
     const cap = 12000;
     for (let i = 0; i < count; i++) {
       if (this.particles.length >= cap) break;
@@ -708,8 +788,10 @@ class AetherbreakerGame {
       this.particles.push({
         x,
         y,
+        z,
         vx: Math.cos(ang) * spd,
         vy: Math.sin(ang) * spd,
+        vz: (Math.random() - 0.45) * spd * 0.7,
         size: size * (0.5 + Math.random() * 0.9),
         r: color[0],
         g: color[1],
@@ -830,8 +912,8 @@ class AetherbreakerGame {
     if (!p) return;
     if (this.selectedMode !== 'zen_lab' && p.singularityCooldown > 0) return;
 
-    const tx = this.mouse.x;
-    const ty = this.mouse.y;
+    const tx = this.aimWorld.x;
+    const ty = this.aimWorld.y;
     p.singularityCooldown = 6.5;
 
     this.spawnSingularity(tx, ty, false);
@@ -1066,6 +1148,13 @@ class AetherbreakerGame {
     }
 
     const audioEnergy = this.audio.getAudioEnergy();
+    const camMode = this.state === 'MENU' ? 'tactical_3d' : this.camModes[this.camModeIdx];
+    this.renderer.updateCamera(camMode, this.player, this.width, this.height, rawDt);
+    this.aimWorld = this.renderer.screenToWorldPlane(
+      this.mouse.x,
+      this.mouse.y,
+      this.player ? this.player.z : 55
+    );
 
     if (this.state === 'MENU') {
       // Ambient background spacetime waves on the menu screen
@@ -1078,6 +1167,7 @@ class AetherbreakerGame {
         );
       }
       this.grid.update(rawDt, audioEnergy.bass, this.fx.elasticity);
+      this.arMap.update(rawDt, [], [], () => {}, []);
       this._renderScene(audioEnergy);
       this._clearHUD();
     } else if (this.state === 'PLAYING') {
@@ -1152,6 +1242,13 @@ class AetherbreakerGame {
     this._updateEnemyBullets(wDt);
     this._updateEffects(rawDt);
 
+    this.arMap.update(
+      wDt,
+      this.enemies,
+      this.singularities,
+      (e, dmg, crit, col) => this.damageEnemy(e, dmg, crit, col),
+      this.lightningArcs
+    );
     this.grid.update(wDt, audioEnergy.bass, this.fx.elasticity);
   }
 
@@ -1170,7 +1267,7 @@ class AetherbreakerGame {
       p.dashTimer -= dt;
       this.grid.applyDirectedForce(p.x, p.y, p.vx * 0.025, p.vy * 0.025, 95);
       this.checkBulletParry();
-      p.trail.push({ x: p.x, y: p.y, alpha: 0.9 });
+      p.trail.push({ x: p.x, y: p.y, z: p.z, alpha: 0.9 });
     } else {
       let mx = 0;
       let my = 0;
@@ -1191,6 +1288,12 @@ class AetherbreakerGame {
     p.x += p.vx * dt;
     p.y += p.vy * dt;
 
+    // 3D Altitude & Pitch dynamics (swoops up during Phase Dash, gentle hover in cruise)
+    const targetZ = (p.dashTimer > 0 ? 84 : 55) + Math.sin(this.time * 2.4) * 3.5;
+    const prevZ = p.z;
+    p.z += (targetZ - p.z) * Math.min(1, dt * 8.5);
+    p.pitch = Math.max(-0.28, Math.min(0.28, (p.z - prevZ) * 0.35 + (p.dashTimer > 0 ? 0.14 : 0)));
+
     const pad = 22;
     if (p.x < pad) { p.x = pad; p.vx = Math.max(0, p.vx); }
     if (p.x > this.width - pad) { p.x = this.width - pad; p.vx = Math.min(0, p.vx); }
@@ -1198,7 +1301,7 @@ class AetherbreakerGame {
     if (p.y > this.height - pad) { p.y = this.height - pad; p.vy = Math.min(0, p.vy); }
 
     p.prevAngle = p.angle;
-    p.angle = Math.atan2(this.mouse.y - p.y, this.mouse.x - p.x);
+    p.angle = Math.atan2(this.aimWorld.y - p.y, this.aimWorld.x - p.x);
 
     // 3D Roll Banking Inertia & Variable-Geometry Wing Sweep
     let angDiff = p.angle - p.prevAngle;
@@ -1215,7 +1318,7 @@ class AetherbreakerGame {
     p.wingSweep += ((wantsSweep ? 1 : 0) - p.wingSweep) * Math.min(1, dt * 7.5);
     p.muzzleFlashTimer = Math.max(0, p.muzzleFlashTimer - dt);
 
-    // Aerodynamic Wingtip Contrail Vortex Ribbons
+    // Aerodynamic 3D Wingtip Contrail Vortex Ribbons
     const span = (p.ship.wingspan || 22) * (1 - Math.abs(p.bank) * 0.22) * (1 - p.wingSweep * 0.16);
     const aft = -4 - p.wingSweep * 10;
     const ca = Math.cos(p.angle), sa = Math.sin(p.angle);
@@ -1223,10 +1326,11 @@ class AetherbreakerGame {
     const ly = p.y + sa * aft - ca * span;
     const rx = p.x + ca * aft - sa * span;
     const ry = p.y + sa * aft + ca * span;
+    const tipDZ = p.bank * 9;
     if (velMag > 85 || p.dashTimer > 0) {
       const intensity = Math.min(1, (velMag / speed) * 0.55 + Math.abs(p.bank) * 0.45 + (p.dashTimer > 0 ? 0.5 : 0));
-      p.contrailsLeft.push({ x: lx, y: ly, life: 0.42, maxLife: 0.42, alpha: intensity });
-      p.contrailsRight.push({ x: rx, y: ry, life: 0.42, maxLife: 0.42, alpha: intensity });
+      p.contrailsLeft.push({ x: lx, y: ly, z: p.z + tipDZ, life: 0.42, maxLife: 0.42, alpha: intensity });
+      p.contrailsRight.push({ x: rx, y: ry, z: p.z - tipDZ, life: 0.42, maxLife: 0.42, alpha: intensity });
       if (p.contrailsLeft.length > 26) p.contrailsLeft.shift();
       if (p.contrailsRight.length > 26) p.contrailsRight.shift();
     }
@@ -1246,8 +1350,10 @@ class AetherbreakerGame {
       this.particles.push({
         x: bx + (Math.random() - 0.5) * 6,
         y: by + (Math.random() - 0.5) * 6,
+        z: p.z,
         vx: -Math.cos(p.angle) * 120 + (Math.random() - 0.5) * 40,
         vy: -Math.sin(p.angle) * 120 + (Math.random() - 0.5) * 40,
+        vz: (Math.random() - 0.5) * 30,
         size: 5.5,
         r: p.ship.accent[0],
         g: p.ship.accent[1],
@@ -2164,8 +2270,10 @@ class AetherbreakerGame {
       }
       pt.vx *= pt.drag;
       pt.vy *= pt.drag;
+      pt.vz = (pt.vz || 0) * pt.drag;
       pt.x += pt.vx * dt;
       pt.y += pt.vy * dt;
+      pt.z = (pt.z ?? 50) + pt.vz * dt;
     }
 
     for (let i = this.shockwaves.length - 1; i >= 0; i--) {
@@ -2204,118 +2312,134 @@ class AetherbreakerGame {
 
   _renderScene(audioEnergy) {
     const r = this.renderer;
-    r.beginFrame();
+    r.beginFrame(this.arMap.arMode);
 
-    // 1. Deep Cosmic Starfield Parallax
-    const px = this.player ? (this.player.x - this.width * 0.5) * 0.04 : 0;
-    const py = this.player ? (this.player.y - this.height * 0.5) * 0.04 : 0;
+    // 1. Deep 3D Cosmic Starfield Parallax
     for (let i = 0; i < this.stars.length; i++) {
       const st = this.stars[i];
-      const sx = ((st.x * this.width - px * st.depth) % this.width + this.width) % this.width;
-      const sy = ((st.y * this.height - py * st.depth) % this.height + this.height) % this.height;
+      const sx = (st.x * 1.9 - 0.45) * this.width;
+      const sy = (st.y * 1.9 - 0.45) * this.height;
+      const sz = -180 - st.depth * 360;
       const tw = 0.4 + 0.5 * Math.sin(this.time * 2.2 + st.twinkle);
-      r.drawParticle(sx, sy, st.size, 0.55, 0.78, 1.0, tw * 0.65, 0, 0, 0);
+      r.drawParticle3D(sx, sy, sz, st.size * 1.6, 0.55, 0.78, 1.0, tw * 0.65, 0, 0, 0, 0);
     }
 
-    // 2. Deformable Spacetime Grid
+    // 2. Deformable 3D Spacetime Grid & 3D Augmented Reality Map
     const palette = PALETTES[this.paletteIdx % PALETTES.length];
     this.grid.renderToBatch(r, palette, audioEnergy.bass);
+    this.arMap.render3D(r, this.time, audioEnergy);
 
-    // 3. Weaver Laser Links
+    // 3. Weaver Laser Links (3D)
     const weavers = this.enemies.filter(e => e.type === 'weaver');
     for (let a = 0; a < weavers.length; a++) {
       for (let b = a + 1; b < weavers.length; b++) {
         const d = Math.hypot(weavers[b].x - weavers[a].x, weavers[b].y - weavers[a].y);
         if (d < 340) {
-          r.drawLine(weavers[a].x, weavers[a].y, weavers[b].x, weavers[b].y, 0.2, 1.0, 0.65, 0.85, 3.2);
+          r.drawLine3D(
+            weavers[a].x, weavers[a].y, weavers[a].z || 55,
+            weavers[b].x, weavers[b].y, weavers[b].z || 55,
+            0.2, 1.0, 0.65, 0.85, 3.2
+          );
         }
       }
     }
 
-    // 4. Singularities (Shader uniforms + accretion ring lines)
+    // 4. Singularities (3D Projected Shader Uniforms + Accretion Rings)
     for (const s of this.singularities) {
-      r.addSingularityUniform(s.x, s.y, s.lensingRadius, s.strength);
-      r.drawCircle(s.x, s.y, s.lensingRadius * 0.34, 0.75, 0.45, 1.0, 0.85, 28, 2.5);
-      r.drawCircle(s.x, s.y, s.radius * 0.85, 0.35, 0.8, 1.0, 0.2, 32, 1.2);
+      r.addSingularityUniform(s.x, s.y, 14, s.lensingRadius, s.strength);
+      r.drawCircle3D(s.x, s.y, 14, s.lensingRadius * 0.34, 0.75, 0.45, 1.0, 0.85, 28, 2.5);
+      r.drawCircle3D(s.x, s.y, 6, s.radius * 0.85, 0.35, 0.8, 1.0, 0.22, 32, 1.2);
     }
 
-    // 5. Player Wingtip Contrail Ribbons & Phase Echo Decoys
+    // 5. Player 3D Wingtip Contrail Ribbons, Ground Shadow Tethers & Decoys
     if (this.player && this.state !== 'MENU') {
-      const c = this.player.ship.color;
+      const p = this.player;
+      const c = p.ship.color;
       const drawRibbon = pts => {
         for (let i = 1; i < pts.length; i++) {
           const p0 = pts[i - 1];
           const p1 = pts[i];
           const a = (p1.life / p1.maxLife) * p1.alpha * 0.65;
-          r.drawLine(p0.x, p0.y, p1.x, p1.y, c[0], c[1], c[2], a, 2.2);
+          r.drawLine3D(p0.x, p0.y, p0.z ?? p.z, p1.x, p1.y, p1.z ?? p.z, c[0], c[1], c[2], a, 2.2);
         }
       };
-      drawRibbon(this.player.contrailsLeft);
-      drawRibbon(this.player.contrailsRight);
+      drawRibbon(p.contrailsLeft);
+      drawRibbon(p.contrailsRight);
+
+      r.drawLine3D(p.x, p.y, 0, p.x, p.y, p.z, c[0], c[1], c[2], 0.22, 1.2);
+      r.drawCircle3D(p.x, p.y, 1, 18, c[0], c[1], c[2], 0.3, 16, 1.4);
+    }
+    for (const e of this.enemies) {
+      const ez = e.z || 55;
+      r.drawLine3D(e.x, e.y, 0, e.x, e.y, ez, e.color[0], e.color[1], e.color[2], e.isBoss ? 0.28 : 0.16, 1.1);
+      r.drawCircle3D(e.x, e.y, 1, e.radius * 0.85, e.color[0], e.color[1], e.color[2], 0.22, 14, 1.2);
     }
     for (const d of this.decoys) {
       const pulse = 1 + Math.sin(this.time * 25) * 0.2;
-      r.drawCircle(d.x, d.y, 16 * pulse, d.color[0], d.color[1], d.color[2], 0.9, 16, 2.4);
+      r.drawCircle3D(d.x, d.y, 55, 16 * pulse, d.color[0], d.color[1], d.color[2], 0.9, 16, 2.4);
     }
 
-    // Flush background grid, contrails & singularities before drawing aircraft hulls
     r.flushLayer();
 
-    // 6. Enemy & Boss Aircraft
+    // 6. Enemy & Boss 3D Aircraft
     for (const e of this.enemies) {
       this._renderEnemy(e);
     }
 
-    // 7. Player Fighter Jet, Afterburners, Mach Cone & Orbitals
+    // 7. Player 3D Fighter Jet, Afterburners, Mach Cone & Orbitals
     if (this.player && this.state !== 'MENU') {
       this._renderPlayer();
     }
 
-    // Flush aircraft layer so bullets, beams, lightning & explosions render crisp on top
     r.flushLayer();
 
-    // 8. Bullets
+    // 8. 3D Bullets
+    const pz = this.player ? this.player.z : 55;
     for (const b of this.playerBullets) {
       const ang = Math.atan2(b.vy, b.vx);
-      const tail = b.type === 'missile' ? 16 : 20;
-      r.drawLine(
-        b.x, b.y,
-        b.x - Math.cos(ang) * tail, b.y - Math.sin(ang) * tail,
+      const tail = b.type === 'missile' ? 18 : 22;
+      const bz = b.z ?? pz;
+      r.drawLine3D(
+        b.x, b.y, bz,
+        b.x - Math.cos(ang) * tail, b.y - Math.sin(ang) * tail, bz,
         b.color[0], b.color[1], b.color[2], 0.98, b.type === 'missile' ? 3.5 : 2.8
       );
-      r.drawParticle(b.x, b.y, 8, b.color[0], b.color[1], b.color[2], 0.9, b.vx * 0.02, b.vy * 0.02, 0.02);
+      r.drawParticle3D(b.x, b.y, bz, 8, b.color[0], b.color[1], b.color[2], 0.9, b.vx * 0.02, b.vy * 0.02, 0, 0.02);
     }
 
     for (const b of this.enemyBullets) {
-      r.drawParticle(b.x, b.y, b.radius * 2.1, b.color[0], b.color[1], b.color[2], 0.95, 0, 0, 0);
-      r.drawCircle(b.x, b.y, b.radius, 1.0, 0.9, 0.95, 0.9, 10, 1.6);
+      const bz = b.z ?? 55;
+      r.drawParticle3D(b.x, b.y, bz, b.radius * 2.1, b.color[0], b.color[1], b.color[2], 0.95, 0, 0, 0, 0);
+      r.drawCircle3D(b.x, b.y, bz, b.radius, 1.0, 0.9, 0.95, 0.9, 10, 1.6);
     }
 
-    // 9. Rail Beams & Fractal Lightning Arcs
+    // 9. 3D Rail Beams & Fractal Lightning Arcs
     for (const rb of this.railBeams) {
       const alpha = rb.life / rb.maxLife;
-      r.drawLine(rb.x1, rb.y1, rb.x2, rb.y2, rb.color[0], rb.color[1], rb.color[2], alpha * 0.55, rb.width);
-      r.drawLine(rb.x1, rb.y1, rb.x2, rb.y2, 1.0, 1.0, 1.0, alpha * 0.95, rb.width * 0.35);
+      const bz = rb.z ?? pz;
+      r.drawLine3D(rb.x1, rb.y1, bz, rb.x2, rb.y2, bz, rb.color[0], rb.color[1], rb.color[2], alpha * 0.55, rb.width);
+      r.drawLine3D(rb.x1, rb.y1, bz, rb.x2, rb.y2, bz, 1.0, 1.0, 1.0, alpha * 0.95, rb.width * 0.35);
     }
 
     for (const arc of this.lightningArcs) {
       const alpha = arc.life / arc.maxLife;
-      r.drawPoly(arc.pts, arc.color[0], arc.color[1], arc.color[2], alpha, false, 3.0);
-      r.drawPoly(arc.pts, 1.0, 1.0, 1.0, alpha * 0.85, false, 1.2);
+      r.drawPoly(arc.pts, arc.color[0], arc.color[1], arc.color[2], alpha, false, 3.0, 55);
+      r.drawPoly(arc.pts, 1.0, 1.0, 1.0, alpha * 0.85, false, 1.2, 55);
     }
 
-    // 10. Shockwaves (Shader ripples + crisp rings)
+    // 10. 3D Shockwaves
     for (const sw of this.shockwaves) {
       const alpha = sw.life / sw.maxLife;
-      r.addShockwaveUniform(sw.x, sw.y, sw.radius, sw.thickness);
-      r.drawCircle(sw.x, sw.y, sw.radius, sw.color[0], sw.color[1], sw.color[2], alpha * 0.8, 36, 2.5);
+      const sz = sw.z ?? 35;
+      r.addShockwaveUniform(sw.x, sw.y, sz, sw.radius, sw.thickness);
+      r.drawCircle3D(sw.x, sw.y, sz, sw.radius, sw.color[0], sw.color[1], sw.color[2], alpha * 0.8, 36, 2.5);
     }
 
-    // 11. GPU Particle System
+    // 11. 3D GPU Particle System
     for (let i = 0; i < this.particles.length; i++) {
       const pt = this.particles[i];
       const alpha = Math.max(0, pt.life / pt.maxLife);
-      r.drawParticle(pt.x, pt.y, pt.size, pt.r, pt.g, pt.b, alpha, pt.vx, pt.vy, pt.stretch);
+      r.drawParticle3D(pt.x, pt.y, pt.z ?? 50, pt.size, pt.r, pt.g, pt.b, alpha, pt.vx, pt.vy, pt.vz || 0, pt.stretch);
     }
 
     const shakeMag = this.trauma * this.trauma * 14;
@@ -2338,7 +2462,6 @@ class AetherbreakerGame {
     const p = this.player;
     const c = p.ship.color;
     const ac = p.ship.accent;
-    const rot = p.angle + Math.PI * 0.5;
     const swept = p.wingSweep > 0.5;
     const sprite = this.atlas.getPlayerSprite(p.ship.id, p.bank, swept);
     const abFrame = Math.floor(this.time * 28) % 4;
@@ -2346,7 +2469,7 @@ class AetherbreakerGame {
 
     // Phase Dash Ghost Afterimages
     for (const tr of p.trail) {
-      r.drawSprite(sprite, tr.x, tr.y, 58, 58, rot, c[0], c[1], c[2], tr.alpha * 0.4, 0, true, p.bank);
+      r.drawSprite3D(sprite, tr.x, tr.y, tr.z ?? p.z, 62, 62, p.angle, p.pitch, p.bank, c[0], c[1], c[2], tr.alpha * 0.4, 0, true, 0.8, false);
     }
 
     const alpha = p.invuln > 0 && Math.floor(this.time * 24) % 2 === 0 ? 0.48 : 1.0;
@@ -2356,36 +2479,43 @@ class AetherbreakerGame {
     const plumeScale = 0.55 + p.throttle * 0.65 + (p.dashTimer > 0 ? 0.75 : 0);
     const nozzles = p.ship.nozzles || [-5, 5];
     for (const nz of nozzles) {
-      const lx = -22 - plumeScale * 10;
+      const lx = -24 - plumeScale * 10;
       const ly = nz * (1 - Math.abs(p.bank) * 0.25);
       const ax = p.x + ca * lx - sa * ly;
       const ay = p.y + sa * lx + ca * ly;
-      r.drawSprite(abSprite, ax, ay, 18, 28 * plumeScale, rot, 1, 1, 1, 0.92 * alpha, 0, true);
+      r.drawSprite3D(abSprite, ax, ay, p.z, 20, 30 * plumeScale, p.angle, p.pitch, p.bank, 1, 1, 1, 0.92 * alpha, 0, true, 0.85, false);
     }
 
-    // Real Textured Fighter Jet Airframe (with 3D roll bank & wing sweep)
-    r.drawSprite(sprite, p.x, p.y, 58, 58, rot, 1.0, 1.0, 1.0, alpha, p.invuln > 0.5 ? 0.35 : 0, false, p.bank, 0.75);
+    // 3D Textured Fighter Jet Airframe (yaw, pitch, roll-bank in true 3D perspective)
+    r.drawSprite3D(sprite, p.x, p.y, p.z, 62, 62, p.angle, p.pitch, p.bank, 1, 1, 1, alpha, p.invuln > 0.5 ? 0.35 : 0, false, 0.75, false);
+
+    // 3D Volumetric Dorsal Canopy Crest Line
+    r.drawLine3D(
+      p.x + ca * 14, p.y + sa * 14, p.z + 9,
+      p.x - ca * 14, p.y - sa * 14, p.z + 5,
+      c[0], c[1], c[2], 0.55 * alpha, 1.8
+    );
 
     // Wing Hardpoint Muzzle Flashes
     if (p.muzzleFlashTimer > 0) {
       const mf = this.atlas.getSprite('muzzle_flash');
       const fAlpha = p.muzzleFlashTimer / 0.075;
       [-11, 11].forEach(wy => {
-        const fx = p.x + ca * 20 - sa * wy;
-        const fy = p.y + sa * 20 + ca * wy;
-        r.drawSprite(mf, fx, fy, 22, 22, rot, ac[0], ac[1], ac[2], fAlpha, 0, true);
+        const fx = p.x + ca * 22 - sa * wy;
+        const fy = p.y + sa * 22 + ca * wy;
+        r.drawSprite3D(mf, fx, fy, p.z, 22, 22, p.angle, 0, 0, ac[0], ac[1], ac[2], fAlpha, 0, true, 0.9, true);
       });
     }
 
     // Supersonic Prandtl-Glauert Mach Vapor Cone during Phase Dash
     if (p.dashTimer > 0) {
       const mc = this.atlas.getSprite('mach_cone');
-      r.drawSprite(mc, p.x + ca * 6, p.y + sa * 6, 74, 68, rot, c[0], c[1], c[2], 0.85, 0, true);
+      r.drawSprite3D(mc, p.x + ca * 6, p.y + sa * 6, p.z, 78, 72, p.angle, p.pitch, p.bank, c[0], c[1], c[2], 0.85, 0, true, 0.8, false);
     }
 
     // Entropy Aegis Shield Ring
     if (p.entropyShieldReady) {
-      r.drawCircle(p.x, p.y, p.radius + 14, 0.2, 0.95, 1.0, 0.65, 24, 1.8);
+      r.drawCircle3D(p.x, p.y, p.z, p.radius + 14, 0.2, 0.95, 1.0, 0.65, 24, 1.8);
     }
 
     // Orbitals
@@ -2395,8 +2525,9 @@ class AetherbreakerGame {
         const a = p.orbitalAngle + (i / p.orbitals) * Math.PI * 2;
         const ox = p.x + Math.cos(a) * orbR;
         const oy = p.y + Math.sin(a) * orbR;
-        r.drawCircle(ox, oy, 7, ac[0], ac[1], ac[2], 0.95, 10, 2.2);
-        r.drawParticle(ox, oy, 11, c[0], c[1], c[2], 0.75, 0, 0, 0);
+        const oz = p.z + Math.sin(a * 2 + this.time * 4) * 10;
+        r.drawCircle3D(ox, oy, oz, 7, ac[0], ac[1], ac[2], 0.95, 10, 2.2);
+        r.drawParticle3D(ox, oy, oz, 11, c[0], c[1], c[2], 0.75, 0, 0, 0, 0);
       }
     }
   }
@@ -2404,6 +2535,7 @@ class AetherbreakerGame {
   _renderEnemy(e) {
     const r = this.renderer;
     const flash = e.hitFlash > 0 ? 1.0 : 0.0;
+    const ez = e.z || 55;
     const abFrame = Math.floor(this.time * 24) % 4;
     const abSprite = this.atlas.getSprite(`afterburner_${abFrame}`);
     const rotorSprite = this.atlas.getSprite('rotor_blur');
@@ -2412,78 +2544,73 @@ class AetherbreakerGame {
 
     if (e.isBoss) {
       if (e.tier === 1) {
-        // ARCHON SKY-FORTRESS (XB-999 Flying Wing + 4 Spinning Props + 4 Swiveling Turrets)
         const bossSpr = this.atlas.getSprite('boss_archon');
-        const rot = Math.PI; // Facing downward toward player arena
+        const yaw = Math.PI * 0.5;
+        const bank = Math.sin(this.time * 0.9) * 0.22;
         [-32, -11, 11, 32].forEach(nx => {
-          r.drawSprite(abSprite, e.x + nx, e.y - 68, 22, 42, rot, 1, 1, 1, 0.9, 0, true);
+          r.drawSprite3D(abSprite, e.x + nx, e.y - 70, ez, 24, 44, yaw, 0, bank, 1, 1, 1, 0.9, 0, true);
         });
-        r.drawSprite(bossSpr, e.x, e.y, 196, 196, rot, 1, 1, 1, 1, flash, false, Math.sin(this.time * 0.9) * 0.2, 0.8);
+        r.drawSprite3D(bossSpr, e.x, e.y, ez, 204, 204, yaw, 0, bank, 1, 1, 1, 1, flash, false, 0.8);
+        r.drawBox3D(e.x, e.y, ez - 14, 130, 75, 28, e.color[0], e.color[1], e.color[2], 0.22, 1.2);
 
-        // 4 Spinning Wing Propellers
         [[-64, -6], [-38, 12], [38, 12], [64, -6]].forEach(([px, py], idx) => {
-          r.drawSprite(rotorSprite, e.x + px, e.y + py, 44, 44, this.time * (idx % 2 === 0 ? 18 : -18), 0.5, 0.95, 1.0, 0.78, 0, true);
+          r.drawSprite3D(rotorSprite, e.x + px, e.y + py, ez + 10, 46, 46, this.time * (idx % 2 === 0 ? 18 : -18), 0, bank, 0.5, 0.95, 1.0, 0.78, 0, true);
         });
-
-        // 4 Independently Tracking Wing Turrets
         [[-46, 18], [-22, -12], [22, -12], [46, 18]].forEach(([tx, ty]) => {
-          r.drawSprite(turretSprite, e.x + tx, e.y + ty, 28, 28, (e.turretAngle || 0) + Math.PI * 0.5, 1, 1, 1, 0.96, flash, false);
+          r.drawSprite3D(turretSprite, e.x + tx, e.y + ty, ez + 14, 28, 28, e.turretAngle || 0, 0, 0, 1, 1, 1, 0.96, flash, false);
         });
 
         if (e.phase >= 2) {
           for (let s = 0; s < 4; s++) {
             const a = e.spokeAngle + (s / 4) * Math.PI * 2;
-            r.drawLine(e.x, e.y, e.x + Math.cos(a) * 360, e.y + Math.sin(a) * 360, e.accent[0], e.accent[1], e.accent[2], 0.65, 3.0);
+            r.drawLine3D(e.x, e.y, ez, e.x + Math.cos(a) * 360, e.y + Math.sin(a) * 360, 55, e.accent[0], e.accent[1], e.accent[2], 0.65, 3.0);
           }
         }
       } else if (e.tier === 2) {
-        // SERAPHIM SKY-LEVIATHAN (12-Aircraft Articulated Gunship Convoy)
         const segSpr = this.atlas.getSprite('boss_seraphim_seg');
         for (let s = e.segments.length - 1; s >= 1; s--) {
           const seg = e.segments[s];
-          const sz = seg.radius * 2.5;
-          r.drawSprite(segSpr, seg.x, seg.y, sz, sz, seg.angle + Math.PI * 0.5, 1, 1, 1, 0.98, flash, false, 0, 0.65);
+          const sz = seg.radius * 2.55;
+          const szZ = (seg.z || ez) + Math.sin(this.time * 4 + s * 0.6) * 8;
+          r.drawSprite3D(segSpr, seg.x, seg.y, szZ, sz, sz, seg.angle, 0, 0, 1, 1, 1, 0.98, flash, false, 0.65);
           if (s % 2 === 1) {
-            r.drawSprite(turretSprite, seg.x, seg.y, 20, 20, (e.turretAngle || 0) + Math.PI * 0.5, 1, 1, 1, 0.95, flash, false);
+            r.drawSprite3D(turretSprite, seg.x, seg.y, szZ + 10, 20, 20, e.turretAngle || 0, 0, 0, 1, 1, 1, 0.95, flash, false);
           }
         }
         const head = e.segments[0];
-        const headRot = head.angle + Math.PI * 0.5;
         const hbX = head.x - Math.cos(head.angle) * 44;
         const hbY = head.y - Math.sin(head.angle) * 44;
-        r.drawSprite(abSprite, hbX, hbY, 24, 46, headRot, 1, 1, 1, 0.95, 0, true);
-        r.drawSprite(this.atlas.getSprite('boss_seraphim'), head.x, head.y, 126, 126, headRot, 1, 1, 1, 1, flash, false, 0, 0.8);
+        r.drawSprite3D(abSprite, hbX, hbY, ez, 24, 46, head.angle, 0, 0, 1, 1, 1, 0.95, 0, true);
+        r.drawSprite3D(this.atlas.getSprite('boss_seraphim'), head.x, head.y, ez, 130, 130, head.angle, 0, 0, 1, 1, 1, 1, flash, false, 0.8);
       } else {
-        // OMEGA VALKYRIE MOTHERSHIP (Orbital Carrier + Singularity Lensing Reactor + Gyroscopes)
-        r.addSingularityUniform(e.x, e.y, e.radius * 1.4, 1.35);
+        r.addSingularityUniform(e.x, e.y, ez, e.radius * 1.4, 1.35);
         const omegaSpr = this.atlas.getSprite('boss_omega');
-        const rot = Math.PI;
+        const yaw = Math.PI * 0.5;
+        const bank = Math.sin(this.time * 0.7) * 0.16;
         [-42, -20, 20, 42].forEach(nx => {
-          r.drawSprite(abSprite, e.x + nx, e.y - 78, 24, 48, rot, 1, 1, 1, 0.95, 0, true);
+          r.drawSprite3D(abSprite, e.x + nx, e.y - 80, ez, 24, 48, yaw, 0, bank, 1, 1, 1, 0.95, 0, true);
         });
-        r.drawSprite(omegaSpr, e.x, e.y, 214, 214, rot, 1, 1, 1, 1, flash, false, Math.sin(this.time * 0.7) * 0.15, 0.85);
-        r.drawSprite(radomeSprite, e.x, e.y - 6, 48, 48, this.time * 3.5, 1, 1, 1, 0.95, 0, false);
+        r.drawSprite3D(omegaSpr, e.x, e.y, ez, 222, 222, yaw, 0, bank, 1, 1, 1, 1, flash, false, 0.85);
+        r.drawSprite3D(radomeSprite, e.x, e.y - 6, ez + 16, 48, 48, this.time * 3.5, 0, 0, 1, 1, 1, 0.95, 0, false);
         [[-52, 8], [52, 8]].forEach(([tx, ty]) => {
-          r.drawSprite(turretSprite, e.x + tx, e.y + ty, 32, 32, (e.turretAngle || 0) + Math.PI * 0.5, 1, 1, 1, 0.98, flash, false);
+          r.drawSprite3D(turretSprite, e.x + tx, e.y + ty, ez + 18, 32, 32, e.turretAngle || 0, 0, 0, 1, 1, 1, 0.98, flash, false);
         });
         r.draw3DWireframe(
           MESH_RING_X.verts, MESH_RING_X.edges,
-          e.x, e.y, e.radius * 0.95, e.rotX * 1.6, e.rotY, 0, e.accent[0], e.accent[1], e.accent[2], 0.55, 1.8
+          e.x, e.y, e.radius * 0.95, e.rotX * 1.6, e.rotY, 0, e.accent[0], e.accent[1], e.accent[2], 0.55, 1.8, ez
         );
         r.draw3DWireframe(
           MESH_RING_Y.verts, MESH_RING_Y.edges,
-          e.x, e.y, e.radius * 0.95, e.rotX, -e.rotY * 1.7, e.rotZ, 0.25, 0.95, 1.0, 0.55, 1.8
+          e.x, e.y, e.radius * 0.95, e.rotX, -e.rotY * 1.7, e.rotZ, 0.25, 0.95, 1.0, 0.55, 1.8, ez
         );
         r.draw3DWireframe(
           MESH_RING_Z.verts, MESH_RING_Z.edges,
-          e.x, e.y, e.radius * 0.95, -e.rotX, e.rotY, e.rotZ * 1.8, 1.0, 0.82, 0.25, 0.55, 1.8
+          e.x, e.y, e.radius * 0.95, -e.rotX, e.rotY, e.rotZ * 1.8, 1.0, 0.82, 0.25, 0.55, 1.8, ez
         );
       }
       return;
     }
 
-    // Standard Enemy Aircraft
-    const rot = e.angle + Math.PI * 0.5;
     const bank = e.bank || 0;
     const ca = Math.cos(e.angle), sa = Math.sin(e.angle);
     const sprKey = e.type === 'swarmer' ? 'enemy_swarmer'
@@ -2495,55 +2622,53 @@ class AetherbreakerGame {
       : e.type === 'prism_sniper' ? 'enemy_prism_sniper'
       : 'enemy_carrier';
     const spr = this.atlas.getSprite(sprKey);
-    const size = e.type === 'carrier' ? 78 : e.isMini ? 30 : e.radius * 2.55;
+    const size = e.type === 'carrier' ? 80 : e.isMini ? 30 : e.radius * 2.6;
 
-    // Afterburner plumes for jet fighters
     if (e.type === 'swarmer' || e.type === 'lancer' || e.type === 'splitter' || e.type === 'prism_sniper') {
       const bx = e.x - ca * (size * 0.44);
       const by = e.y - sa * (size * 0.44);
-      r.drawSprite(abSprite, bx, by, size * 0.34, size * 0.5, rot, e.color[0], e.color[1], e.color[2], 0.88, 0, true);
+      r.drawSprite3D(abSprite, bx, by, ez, size * 0.34, size * 0.5, e.angle, 0, bank, e.color[0], e.color[1], e.color[2], 0.88, 0, true);
     }
 
-    r.drawSprite(spr, e.x, e.y, size, size, rot, 1, 1, 1, 1, flash, false, bank, 0.7);
+    r.drawSprite3D(spr, e.x, e.y, ez, size, size, e.angle, 0, bank, 1, 1, 1, 1, flash, false, 0.7);
 
-    // Sub-part animations per aircraft class
     if (e.type === 'lancer') {
       if (e.state === 'telegraph') {
-        r.drawLine(e.x, e.y, e.x + ca * 440, e.y + sa * 440, 1.0, 0.15, 0.25, 0.75, 1.8);
+        r.drawLine3D(e.x, e.y, ez, e.x + ca * 440, e.y + sa * 440, ez, 1.0, 0.15, 0.25, 0.75, 1.8);
       } else if (e.state === 'charge') {
-        r.drawSprite(this.atlas.getSprite('mach_cone'), e.x + ca * 6, e.y + sa * 6, 56, 54, rot, 1.0, 0.72, 0.2, 0.9, 0, true);
+        r.drawSprite3D(this.atlas.getSprite('mach_cone'), e.x + ca * 6, e.y + sa * 6, ez, 58, 56, e.angle, 0, bank, 1.0, 0.72, 0.2, 0.9, 0, true);
       }
     } else if (e.type === 'aegis') {
-      r.drawSprite(rotorSprite, e.x, e.y, size * 0.96, size * 0.96, this.time * 24, 0.25, 0.95, 1.0, 0.75, 0, true);
-      r.drawArc(e.x, e.y, e.radius + 9, e.shieldAngle - 1.05, e.shieldAngle + 1.05, 0.4, 1.0, 1.0, 0.95, 12, 3.6);
+      r.drawSprite3D(rotorSprite, e.x, e.y, ez + 10, size * 0.96, size * 0.96, this.time * 24, 0, 0, 0.25, 0.95, 1.0, 0.75, 0, true);
+      r.drawArc(e.x, e.y, e.radius + 9, e.shieldAngle - 1.05, e.shieldAngle + 1.05, 0.4, 1.0, 1.0, 0.95, 12, 3.6, ez);
     } else if (e.type === 'weaver') {
       [-12, 12].forEach(wy => {
         const px = e.x + ca * 8 - sa * wy;
         const py = e.y + sa * 8 + ca * wy;
-        r.drawSprite(rotorSprite, px, py, 18, 18, this.time * 26, 0.2, 1.0, 0.65, 0.75, 0, true);
+        r.drawSprite3D(rotorSprite, px, py, ez + 6, 18, 18, this.time * 26, 0, 0, 0.2, 1.0, 0.65, 0.75, 0, true);
       });
     } else if (e.type === 'gravity_mine') {
       [-17, 17].forEach(wy => {
         const px = e.x + ca * 4 - sa * wy;
         const py = e.y + sa * 4 + ca * wy;
-        r.drawSprite(rotorSprite, px, py, 24, 24, this.time * 22, 0.9, 0.3, 1.0, 0.78, 0, true);
+        r.drawSprite3D(rotorSprite, px, py, ez + 8, 24, 24, this.time * 22, 0, 0, 0.9, 0.3, 1.0, 0.78, 0, true);
       });
-      r.drawSprite(radomeSprite, e.x, e.y, 18, 18, this.time * 4.5, 1, 1, 1, 0.9, 0, false);
-      r.drawCircle(e.x, e.y, 44, e.color[0], e.color[1], e.color[2], 0.25, 20, 1.2);
+      r.drawSprite3D(radomeSprite, e.x, e.y, ez + 10, 18, 18, this.time * 4.5, 0, 0, 1, 1, 1, 0.9, 0, false);
+      r.drawCircle3D(e.x, e.y, ez, 44, e.color[0], e.color[1], e.color[2], 0.25, 20, 1.2);
     } else if (e.type === 'prism_sniper' && e.locking) {
-      r.drawLine(
-        e.x, e.y,
-        e.x + Math.cos(e.aimAngle) * 700, e.y + Math.sin(e.aimAngle) * 700,
+      r.drawLine3D(
+        e.x, e.y, ez,
+        e.x + Math.cos(e.aimAngle) * 700, e.y + Math.sin(e.aimAngle) * 700, 55,
         1.0, 0.25, 0.65, 0.55, 1.4
       );
     } else if (e.type === 'carrier') {
       [-22, -13, 13, 22].forEach(wy => {
         const px = e.x + ca * 4 - sa * wy;
         const py = e.y + sa * 4 + ca * wy;
-        r.drawSprite(rotorSprite, px, py, 18, 18, this.time * 20, 1.0, 0.75, 0.25, 0.78, 0, true);
+        r.drawSprite3D(rotorSprite, px, py, ez + 6, 18, 18, this.time * 20, 0, 0, 1.0, 0.75, 0.25, 0.78, 0, true);
       });
       const aimAng = this.player ? Math.atan2(this.player.y - e.y, this.player.x - e.x) : e.angle;
-      r.drawSprite(turretSprite, e.x, e.y, 24, 24, aimAng + Math.PI * 0.5, 1, 1, 1, 0.95, flash, false);
+      r.drawSprite3D(turretSprite, e.x, e.y, ez + 12, 24, 24, aimAng, 0, 0, 1, 1, 1, 0.95, flash, false);
     }
   }
 
@@ -2706,23 +2831,56 @@ class AetherbreakerGame {
       ctx.restore();
     }
 
-    // 4. Floating Damage Numbers & Parry Callouts
+    // 4. 3D-Projected Floating Damage Numbers & Parry Callouts
     ctx.save();
     ctx.textAlign = 'center';
     for (const ft of this.floatingTexts) {
+      const sp = this.renderer.worldToScreen(ft.x, ft.y, ft.z ?? 58);
+      if (!sp.visible) continue;
       const a = Math.max(0, ft.life / ft.maxLife);
       ctx.globalAlpha = a;
       ctx.font = `800 ${ft.size}px "JetBrains Mono", monospace`;
       ctx.fillStyle = ft.color;
-      ctx.fillText(ft.text, ft.x, ft.y);
+      ctx.fillText(ft.text, sp.x, sp.y);
     }
     ctx.restore();
 
-    // 5. Off-Screen Threat Arrows
+    // 4b. 3D Augmented Reality (AR) Target Lock Bounding Boxes & Telemetry
+    const lidarActive = this.arMap.scanBoostTimer > 0;
+    ctx.save();
+    ctx.font = '700 9px "JetBrains Mono", monospace';
+    for (const e of this.enemies) {
+      const showBox = lidarActive || e.isBoss || e.type === 'prism_sniper' || e.type === 'aegis' || e.type === 'carrier';
+      if (!showBox) continue;
+      const sp = this.renderer.worldToScreen(e.x, e.y, e.z || 55);
+      if (!sp.visible || sp.x < 0 || sp.x > this.width || sp.y < 0 || sp.y > this.height) continue;
+      const half = Math.max(16, Math.min(72, e.radius * sp.scale * 1.15));
+      const c = e.isBoss ? '#ffb830' : lidarActive ? '#2eff9f' : '#2cf5ff';
+      const brk = Math.max(6, half * 0.35);
+
+      ctx.strokeStyle = c;
+      ctx.lineWidth = e.isBoss ? 1.8 : 1.2;
+      ctx.beginPath();
+      // 4 AR corner brackets
+      ctx.moveTo(sp.x - half, sp.y - half + brk); ctx.lineTo(sp.x - half, sp.y - half); ctx.lineTo(sp.x - half + brk, sp.y - half);
+      ctx.moveTo(sp.x + half - brk, sp.y - half); ctx.lineTo(sp.x + half, sp.y - half); ctx.lineTo(sp.x + half, sp.y - half + brk);
+      ctx.moveTo(sp.x + half, sp.y + half - brk); ctx.lineTo(sp.x + half, sp.y + half); ctx.lineTo(sp.x + half - brk, sp.y + half);
+      ctx.moveTo(sp.x - half + brk, sp.y + half); ctx.lineTo(sp.x - half, sp.y + half); ctx.lineTo(sp.x - half, sp.y + half - brk);
+      ctx.stroke();
+
+      const dst = Math.round(Math.hypot(e.x - p.x, e.y - p.y));
+      ctx.fillStyle = c;
+      ctx.textAlign = 'left';
+      ctx.fillText(`ALT:${Math.round(e.z || 55)}m DST:${dst}`, sp.x - half, sp.y - half - 5);
+    }
+    ctx.restore();
+
+    // 5. Off-Screen Threat Arrows (3D-Projected)
     ctx.save();
     for (const e of this.enemies) {
-      if (e.x >= 0 && e.x <= this.width && e.y >= 0 && e.y <= this.height) continue;
-      const ang = Math.atan2(e.y - this.height * 0.5, e.x - this.width * 0.5);
+      const sp = this.renderer.worldToScreen(e.x, e.y, e.z || 55);
+      if (sp.visible && sp.x >= 0 && sp.x <= this.width && sp.y >= 0 && sp.y <= this.height) continue;
+      const ang = Math.atan2((sp.visible ? sp.y : e.y) - this.height * 0.5, (sp.visible ? sp.x : e.x) - this.width * 0.5);
       const pad = 26;
       const ax = Math.max(pad, Math.min(this.width - pad, this.width * 0.5 + Math.cos(ang) * (this.width * 0.48)));
       const ay = Math.max(pad, Math.min(this.height - pad, this.height * 0.5 + Math.sin(ang) * (this.height * 0.46)));
@@ -2738,6 +2896,25 @@ class AetherbreakerGame {
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     }
     ctx.restore();
+
+    // 5b. 3D Cockpit HUD Pitch Ladder when in Cockpit 3D view
+    if (this.camModes[this.camModeIdx] === 'cockpit_3d') {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(46, 255, 159, 0.35)';
+      ctx.lineWidth = 1.2;
+      const cx = this.width * 0.5;
+      const cy = this.height * 0.5;
+      [-70, -35, 35, 70].forEach(dy => {
+        ctx.beginPath();
+        ctx.moveTo(cx - 110, cy + dy); ctx.lineTo(cx - 60, cy + dy);
+        ctx.moveTo(cx + 60, cy + dy); ctx.lineTo(cx + 110, cy + dy);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    // 5c. 3D Isometric AR Holo-Minimap (Bottom Right)
+    this.arMap.renderMinimapHUD(ctx, this.width, this.height, p, this.enemies, this.singularities, this.time);
 
     // 6. Live 32-Band FFT Audio Spectrum Visualizer (Bottom Center)
     const spec = audioEnergy.spectrum;

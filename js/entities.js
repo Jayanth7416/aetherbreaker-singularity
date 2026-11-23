@@ -340,56 +340,56 @@ export function createEnemy(type, x, y, wave = 1) {
   switch (type) {
     case 'swarmer':
       return {
-        type, x, y, vx: 0, vy: 0, angle: Math.random() * Math.PI * 2,
+        type, x, y, z: 46, bank: 0, pitch: 0, vx: 0, vy: 0, angle: Math.random() * Math.PI * 2,
         radius: 13, hp: 22 * hpMult, maxHp: 22 * hpMult, speed: 205 + wave * 3,
         color: [1.0, 0.2, 0.36], score: 60, contactDmg: 12,
         timer: Math.random() * 2, phase: 0
       };
     case 'lancer':
       return {
-        type, x, y, vx: 0, vy: 0, angle: 0,
+        type, x, y, z: 54, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
         radius: 17, hp: 46 * hpMult, maxHp: 46 * hpMult, speed: 155,
         color: [1.0, 0.72, 0.14], score: 130, contactDmg: 18,
         timer: 1.0 + Math.random(), state: 'seek', chargeVx: 0, chargeVy: 0
       };
     case 'weaver':
       return {
-        type, x, y, vx: 0, vy: 0, angle: 0,
+        type, x, y, z: 56, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
         radius: 15, hp: 58 * hpMult, maxHp: 58 * hpMult, speed: 120,
         color: [0.16, 1.0, 0.62], score: 150, contactDmg: 14,
         timer: Math.random() * 4, orbitAngle: Math.random() * Math.PI * 2
       };
     case 'aegis':
       return {
-        type, x, y, vx: 0, vy: 0, angle: 0, shieldAngle: Math.random() * Math.PI * 2,
+        type, x, y, z: 52, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0, shieldAngle: Math.random() * Math.PI * 2,
         radius: 22, hp: 95 * hpMult, maxHp: 95 * hpMult, speed: 95,
         color: [0.18, 0.94, 1.0], score: 200, contactDmg: 18,
         timer: 0
       };
     case 'splitter':
       return {
-        type, x, y, vx: 0, vy: 0, angle: 0,
+        type, x, y, z: 58, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
         radius: 23, hp: 82 * hpMult, maxHp: 82 * hpMult, speed: 112,
         color: [0.72, 0.3, 1.0], score: 190, contactDmg: 16,
         timer: 0, isMini: false
       };
     case 'mini_splitter':
       return {
-        type: 'splitter', x, y, vx: 0, vy: 0, angle: 0,
+        type: 'splitter', x, y, z: 48, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
         radius: 11, hp: 20 * hpMult, maxHp: 20 * hpMult, speed: 230,
         color: [0.85, 0.45, 1.0], score: 50, contactDmg: 10,
         timer: 0, isMini: true
       };
     case 'gravity_mine':
       return {
-        type, x, y, vx: 0, vy: 0, angle: 0,
+        type, x, y, z: 50, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
         radius: 21, hp: 70 * hpMult, maxHp: 70 * hpMult, speed: 62,
         color: [0.88, 0.18, 1.0], score: 170, contactDmg: 22,
         timer: 0
       };
     case 'prism_sniper':
       return {
-        type, x, y, vx: 0, vy: 0, angle: 0,
+        type, x, y, z: 62, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
         radius: 16, hp: 52 * hpMult, maxHp: 52 * hpMult, speed: 108,
         color: [1.0, 0.35, 0.68], score: 175, contactDmg: 12,
         timer: 1.6 + Math.random(), aimAngle: 0, locking: false
@@ -397,7 +397,7 @@ export function createEnemy(type, x, y, wave = 1) {
     case 'carrier':
     default:
       return {
-        type: 'carrier', x, y, vx: 0, vy: 0, angle: 0,
+        type: 'carrier', x, y, z: 68, bank: 0, pitch: 0, vx: 0, vy: 0, angle: 0,
         radius: 30, hp: 195 * hpMult, maxHp: 195 * hpMult, speed: 68,
         color: [1.0, 0.56, 0.14], score: 340, contactDmg: 22,
         timer: 1.2
@@ -416,14 +416,14 @@ export function createBoss(bossTier, width, height, wave = 5) {
       tier: 1,
       name: 'ARCHON SKY-FORTRESS',
       subtitle: 'XB-999 ARSENAL FLYING WING',
-      x: cx, y: cy, vx: 0, vy: 0,
+      x: cx, y: cy, z: 78, vx: 0, vy: 0,
       radius: 74,
       hp: 2100 * scaleHp,
       maxHp: 2100 * scaleHp,
       color: [0.18, 0.96, 1.0],
       accent: [1.0, 0.22, 0.72],
       rotX: 0, rotY: 0, rotZ: 0,
-      bank: 0, angle: Math.PI * 0.5, turretAngle: Math.PI * 0.5,
+      bank: 0, pitch: 0, angle: Math.PI * 0.5, turretAngle: Math.PI * 0.5,
       phase: 1,
       timer: 0,
       patternTimer: 0,
@@ -434,21 +434,21 @@ export function createBoss(bossTier, width, height, wave = 5) {
   if (bossTier === 2) {
     const segments = [];
     for (let i = 0; i < 12; i++) {
-      segments.push({ x: cx + i * 28, y: cy, angle: 0, radius: i === 0 ? 44 : 28 - i * 0.9 });
+      segments.push({ x: cx + i * 28, y: cy, z: 72, angle: 0, radius: i === 0 ? 44 : 28 - i * 0.9 });
     }
     return {
       isBoss: true,
       tier: 2,
       name: 'SERAPHIM SKY-LEVIATHAN',
       subtitle: 'ARTICULATED GUNSHIP CONVOY',
-      x: cx, y: cy, vx: 160, vy: 60,
+      x: cx, y: cy, z: 72, vx: 160, vy: 60,
       radius: 48,
       hp: 3400 * scaleHp,
       maxHp: 3400 * scaleHp,
       color: [0.2, 1.0, 0.65],
       accent: [1.0, 0.78, 0.18],
       rotX: 0, rotY: 0, rotZ: 0,
-      bank: 0, angle: 0, turretAngle: 0,
+      bank: 0, pitch: 0, angle: 0, turretAngle: 0,
       phase: 1,
       timer: 0,
       patternTimer: 0,
@@ -463,14 +463,14 @@ export function createBoss(bossTier, width, height, wave = 5) {
     tier: 3,
     name: 'OMEGA VALKYRIE MOTHERSHIP',
     subtitle: 'ORBITAL SINGULARITY CARRIER',
-    x: cx, y: height * 0.36, vx: 0, vy: 0,
+    x: cx, y: height * 0.36, z: 86, vx: 0, vy: 0,
     radius: 82,
     hp: 5200 * scaleHp,
     maxHp: 5200 * scaleHp,
     color: [0.76, 0.34, 1.0],
     accent: [1.0, 0.2, 0.5],
     rotX: 0, rotY: 0, rotZ: 0,
-    bank: 0, angle: Math.PI * 0.5, turretAngle: Math.PI * 0.5,
+    bank: 0, pitch: 0, angle: Math.PI * 0.5, turretAngle: Math.PI * 0.5,
     phase: 1,
     timer: 0,
     patternTimer: 0,

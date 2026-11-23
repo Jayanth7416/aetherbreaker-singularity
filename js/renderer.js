@@ -1,18 +1,37 @@
-// WebGL2 Multi-Pass HDR Post-Processing, Textured Aircraft Sprite Pass & Particle Batch Renderer
-// Gracefully falls back to Canvas 2D rendering if WebGL2 is unavailable.
+// Full 3D Perspective WebGL2 HDR Post-Processing, 3D Oriented Aircraft Sprite Engine & AR Compositor
+// Gracefully falls back to 3D-projected Canvas 2D rendering if WebGL2 is unavailable.
 
 const LINE_VS = `#version 300 es
 precision highp float;
-in vec2 aPos;
+in vec3 aPos;
+in vec3 aOther;
+in float aSide;
 in vec4 aColor;
 in vec2 aUv;
+uniform mat4 uViewProj;
 uniform vec2 uResolution;
 out vec4 vColor;
 out vec2 vUv;
 void main() {
-  vec2 ndc = (aPos / uResolution) * 2.0 - 1.0;
-  ndc.y = -ndc.y;
-  gl_Position = vec4(ndc, 0.0, 1.0);
+  vec4 clip0 = uViewProj * vec4(aPos, 1.0);
+  vec4 clip1 = uViewProj * vec4(aOther, 1.0);
+  if (clip0.w < 1.0 && clip1.w < 1.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    vColor = vec4(0.0);
+    vUv = aUv;
+    return;
+  }
+  float w0 = max(1.0, clip0.w);
+  float w1 = max(1.0, clip1.w);
+  vec2 ndc0 = clip0.xy / w0;
+  vec2 ndc1 = clip1.xy / w1;
+  vec2 delta = (ndc1 - ndc0) * uResolution;
+  float len = length(delta);
+  vec2 dir = len > 0.0001 ? delta / len : vec2(1.0, 0.0);
+  vec2 perp = vec2(-dir.y, dir.x);
+  vec2 offsetNdc = (perp * aSide) / uResolution * 2.0;
+
+  gl_Position = vec4(clip0.xy + offsetNdc * w0, clip0.z, w0);
   vColor = aColor;
   vUv = aUv;
 }
@@ -36,31 +55,47 @@ void main() {
 const SPRITE_VS = `#version 300 es
 precision highp float;
 in vec2 aQuad;          // -0.5 .. +0.5
-in vec4 iPosRot;        // x, y, rotation, bankTilt
-in vec4 iSizeFlash;     // w, h, hitFlash, emissiveBoost
+in vec4 iPosYaw;        // x, y, z, yaw
+in vec4 iSizePitchBank; // w, h, pitch, bank
 in vec4 iUvRect;        // u0, v0, u1, v1
 in vec4 iColor;         // r, g, b, a
-uniform vec2 uResolution;
+in vec4 iMeta;          // hitFlash, emissiveBoost, billboardFlag, unused
+uniform mat4 uViewProj;
+uniform vec3 uCamRight;
+uniform vec3 uCamUp;
 out vec2 vUv;
 out vec4 vColor;
 out float vHitFlash;
 out float vEmissive;
 void main() {
-  vec2 local = aQuad * iSizeFlash.xy;
-  local.x *= 1.0 - abs(iPosRot.w) * 0.14;
-  float c = cos(iPosRot.z);
-  float s = sin(iPosRot.z);
-  vec2 rotated = vec2(local.x * c - local.y * s, local.x * s + local.y * c);
-  vec2 world = iPosRot.xy + rotated;
-  vec2 ndc = (world / uResolution) * 2.0 - 1.0;
-  ndc.y = -ndc.y;
-  gl_Position = vec4(ndc, 0.0, 1.0);
+  vec3 worldPos;
+  if (iMeta.z > 0.5) {
+    // Camera-facing 3D billboard
+    worldPos = iPosYaw.xyz
+      + uCamRight * (aQuad.x * iSizePitchBank.x)
+      - uCamUp * (aQuad.y * iSizePitchBank.y);
+  } else {
+    // True 3D Aircraft Orientation (yaw, pitch, roll-bank in world space)
+    float yaw = iPosYaw.w;
+    float pitch = iSizePitchBank.z;
+    float roll = iSizePitchBank.w * 0.58;
+    float cy = cos(yaw), sy = sin(yaw);
+    float cp = cos(pitch), sp = sin(pitch);
+    vec3 fwd = vec3(cy * cp, sy * cp, sp);
+    vec3 flatRight = vec3(-sy, cy, 0.0);
+    vec3 upVec = normalize(cross(fwd, flatRight));
+    vec3 wing = flatRight * cos(roll) - upVec * sin(roll);
+    worldPos = iPosYaw.xyz
+      + wing * (aQuad.x * iSizePitchBank.x)
+      - fwd * (aQuad.y * iSizePitchBank.y);
+  }
 
+  gl_Position = uViewProj * vec4(worldPos, 1.0);
   vec2 t = aQuad + 0.5;
   vUv = mix(iUvRect.xy, iUvRect.zw, t);
   vColor = iColor;
-  vHitFlash = iSizeFlash.z;
-  vEmissive = iSizeFlash.w;
+  vHitFlash = iMeta.x;
+  vEmissive = iMeta.y;
 }
 `;
 
@@ -86,23 +121,29 @@ void main() {
 const PARTICLE_VS = `#version 300 es
 precision highp float;
 in vec2 aQuad;
-in vec4 iPosSize;   // x, y, size, stretch
-in vec2 iVel;
+in vec4 iPosSize;   // x, y, z, size
+in vec4 iVelStretch; // vx, vy, vz, stretch
 in vec4 iColor;
-uniform vec2 uResolution;
+uniform mat4 uViewProj;
+uniform vec3 uCamRight;
+uniform vec3 uCamUp;
 out vec2 vQuad;
 out vec4 vColor;
 void main() {
-  float speed = length(iVel);
-  vec2 dir = speed > 0.001 ? iVel / speed : vec2(1.0, 0.0);
-  vec2 perp = vec2(-dir.y, dir.x);
-  float size = iPosSize.z;
-  float lenScale = 1.0 + min(speed * iPosSize.w, 6.5);
-  vec2 offset = dir * (aQuad.x * size * lenScale) + perp * (aQuad.y * size);
-  vec2 worldPos = iPosSize.xy + offset;
-  vec2 ndc = (worldPos / uResolution) * 2.0 - 1.0;
-  ndc.y = -ndc.y;
-  gl_Position = vec4(ndc, 0.0, 1.0);
+  float size = iPosSize.w;
+  vec3 vel = iVelStretch.xyz;
+  float spd = length(vel);
+  vec3 worldPos;
+  if (spd > 5.0 && iVelStretch.w > 0.001) {
+    vec3 vDir = vel / spd;
+    vec3 cCross = cross(vDir, cross(uCamRight, uCamUp));
+    vec3 perp = length(cCross) > 0.001 ? normalize(cCross) : uCamRight;
+    float stretch = 1.0 + min(spd * iVelStretch.w, 6.0);
+    worldPos = iPosSize.xyz + vDir * (aQuad.x * size * stretch) + perp * (aQuad.y * size);
+  } else {
+    worldPos = iPosSize.xyz + (uCamRight * aQuad.x + uCamUp * aQuad.y) * size;
+  }
+  gl_Position = uViewProj * vec4(worldPos, 1.0);
   vQuad = aQuad;
   vColor = iColor;
 }
@@ -175,6 +216,7 @@ uniform float uBloomIntensity;
 uniform float uAberration;
 uniform float uLensingStrength;
 uniform float uChronoShift;
+uniform float uArTransparent;
 uniform vec2 uShakeOffset;
 uniform vec4 uSingularities[8];
 uniform int uNumSingularities;
@@ -188,7 +230,6 @@ void main() {
   float horizonDark = 1.0;
   vec3 lensingGlow = vec3(0.0);
 
-  // Gravitational Lensing from active Singularities
   for (int i = 0; i < 8; i++) {
     if (i >= uNumSingularities) break;
     vec4 s = uSingularities[i];
@@ -215,7 +256,6 @@ void main() {
     }
   }
 
-  // Refractive Shockwaves
   vec3 shockGlow = vec3(0.0);
   for (int i = 0; i < 8; i++) {
     if (i >= uNumShockwaves) break;
@@ -232,7 +272,6 @@ void main() {
     }
   }
 
-  // Radial Chromatic Aberration
   vec2 fromCenter = uv - 0.5;
   float edgeDist = length(fromCenter);
   float caAmt = (0.0012 + edgeDist * 0.0032) * uAberration;
@@ -242,10 +281,12 @@ void main() {
   vec2 uvG = clamp(uv, 0.001, 0.999);
   vec2 uvB = clamp(uv - caOffset, 0.001, 0.999);
 
-  float r = texture(uSceneTex, uvR).r;
-  float g = texture(uSceneTex, uvG).g;
-  float b = texture(uSceneTex, uvB).b;
-  vec3 sceneCol = vec3(r, g, b);
+  vec4 texG = texture(uSceneTex, uvG);
+  vec3 sceneCol = vec3(
+    texture(uSceneTex, uvR).r,
+    texG.g,
+    texture(uSceneTex, uvB).b
+  );
 
   vec3 bloomCol = vec3(
     texture(uBloomTex, uvR).r,
@@ -264,11 +305,35 @@ void main() {
   float scan = 0.965 + 0.035 * sin(uv.y * uResolution.y * 1.4);
   float vig = smoothstep(1.05, 0.35, edgeDist);
   color *= scan * (0.72 + 0.28 * vig);
-
   color = color / (1.0 + color * 0.12);
-  fragColor = vec4(color, 1.0);
+
+  if (uArTransparent > 0.5) {
+    float lum = max(color.r, max(color.g, color.b));
+    float blackCore = (1.0 - horizonDark) * 0.92;
+    float alpha = clamp(max(texG.a, lum * 1.65) + blackCore, 0.0, 1.0);
+    fragColor = vec4(color, alpha);
+  } else {
+    fragColor = vec4(color, 1.0);
+  }
 }
 `;
+
+function norm3(v) {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+}
+
+function cross3(a, b) {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0]
+  ];
+}
+
+function dot3(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
 
 export class WebGLPostRenderer {
   constructor(glCanvas) {
@@ -283,21 +348,41 @@ export class WebGLPostRenderer {
     this.atlasCanvas = null;
     this.atlasTex = null;
 
-    // Geometry buffers
-    this.maxLineVerts = 180000;
-    this.lineFloatsPerVert = 8; // x, y, r, g, b, a, u, v
+    // 3D Camera State
+    this.cam = {
+      mode: 'tactical_3d',
+      eye: [this.width * 0.5, this.height * 0.5 + 340, 820],
+      target: [this.width * 0.5, this.height * 0.5, 25],
+      right: [1, 0, 0],
+      camUp: [0, -1, 0],
+      forward: [0, 0, -1],
+      fovY: (50 * Math.PI) / 180,
+      f: 1 / Math.tan((25 * Math.PI) / 180),
+      aspect: this.width / Math.max(1, this.height),
+      near: 6,
+      far: 6500,
+      viewProj: new Float32Array(16)
+    };
+    this.defaultZ = 55;
+
+    // 3D Line Quad Buffer: x0,y0,z0, x1,y1,z1, side, r,g,b,a, u,v (13 floats/vert)
+    this.maxLineVerts = 190000;
+    this.lineFloatsPerVert = 13;
     this.lineData = new Float32Array(this.maxLineVerts * this.lineFloatsPerVert);
     this.lineVertCount = 0;
 
+    // 3D Instanced Sprite Buffer: 20 floats/instance
+    // posYaw(4), sizePitchBank(4), uvRect(4), color(4), meta(4)
     this.maxSprites = 4096;
-    this.spriteFloats = 16; // x,y,rot,bank | w,h,flash,emissive | u0,v0,u1,v1 | r,g,b,a
+    this.spriteFloats = 20;
     this.alphaSpriteData = new Float32Array(this.maxSprites * this.spriteFloats);
     this.alphaSpriteCount = 0;
     this.addSpriteData = new Float32Array(this.maxSprites * this.spriteFloats);
     this.addSpriteCount = 0;
 
+    // 3D Instanced Particle Buffer: 12 floats/instance (x,y,z,size, vx,vy,vz,stretch, r,g,b,a)
     this.maxParticles = 16384;
-    this.particleFloats = 10; // x, y, size, stretch, vx, vy, r, g, b, a
+    this.particleFloats = 12;
     this.particleData = new Float32Array(this.maxParticles * this.particleFloats);
     this.particleCount = 0;
 
@@ -307,12 +392,14 @@ export class WebGLPostRenderer {
 
     this._initContext();
     this.resize(this.width, this.height);
+    this.updateCamera('tactical_3d', null, this.width, this.height, 1);
   }
 
   _initContext() {
     const gl = this.canvas.getContext('webgl2', {
-      alpha: false,
+      alpha: true,
       antialias: false,
+      premultipliedAlpha: false,
       powerPreference: 'high-performance',
       preserveDrawingBuffer: false
     });
@@ -334,7 +421,7 @@ export class WebGLPostRenderer {
       this._setupGeometry();
       this._setupFramebuffers();
     } catch (err) {
-      console.warn('WebGL2 shader setup failed, switching to 2D fallback:', err);
+      console.warn('WebGL2 3D shader setup failed, switching to 2D fallback:', err);
       this._enableFallback();
     }
   }
@@ -382,7 +469,7 @@ export class WebGLPostRenderer {
   _setupGeometry() {
     const gl = this.gl;
 
-    // 1. Dynamic Line/Quad VAO
+    // 1. 3D Line Quad VAO
     this.lineVao = gl.createVertexArray();
     this.lineVbo = gl.createBuffer();
     gl.bindVertexArray(this.lineVao);
@@ -391,17 +478,23 @@ export class WebGLPostRenderer {
 
     const stride = this.lineFloatsPerVert * 4;
     const locPos = gl.getAttribLocation(this.lineProg, 'aPos');
+    const locOther = gl.getAttribLocation(this.lineProg, 'aOther');
+    const locSide = gl.getAttribLocation(this.lineProg, 'aSide');
     const locCol = gl.getAttribLocation(this.lineProg, 'aColor');
     const locUv = gl.getAttribLocation(this.lineProg, 'aUv');
 
     gl.enableVertexAttribArray(locPos);
-    gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, stride, 0);
+    gl.vertexAttribPointer(locPos, 3, gl.FLOAT, false, stride, 0);
+    gl.enableVertexAttribArray(locOther);
+    gl.vertexAttribPointer(locOther, 3, gl.FLOAT, false, stride, 12);
+    gl.enableVertexAttribArray(locSide);
+    gl.vertexAttribPointer(locSide, 1, gl.FLOAT, false, stride, 24);
     gl.enableVertexAttribArray(locCol);
-    gl.vertexAttribPointer(locCol, 4, gl.FLOAT, false, stride, 8);
+    gl.vertexAttribPointer(locCol, 4, gl.FLOAT, false, stride, 28);
     gl.enableVertexAttribArray(locUv);
-    gl.vertexAttribPointer(locUv, 2, gl.FLOAT, false, stride, 24);
+    gl.vertexAttribPointer(locUv, 2, gl.FLOAT, false, stride, 44);
 
-    // 2. Instanced Aircraft Sprite VAO
+    // 2. 3D Instanced Sprite VAO
     this.spriteVao = gl.createVertexArray();
     gl.bindVertexArray(this.spriteVao);
 
@@ -419,30 +512,27 @@ export class WebGLPostRenderer {
     this.spriteInstVbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteInstVbo);
     gl.bufferData(gl.ARRAY_BUFFER, this.alphaSpriteData.byteLength, gl.DYNAMIC_DRAW);
-
     const sStride = this.spriteFloats * 4;
-    const locSPosRot = gl.getAttribLocation(this.spriteProg, 'iPosRot');
-    const locSSizeFlash = gl.getAttribLocation(this.spriteProg, 'iSizeFlash');
-    const locSUvRect = gl.getAttribLocation(this.spriteProg, 'iUvRect');
+
+    const locPosYaw = gl.getAttribLocation(this.spriteProg, 'iPosYaw');
+    const locSizePB = gl.getAttribLocation(this.spriteProg, 'iSizePitchBank');
+    const locUvR = gl.getAttribLocation(this.spriteProg, 'iUvRect');
     const locSCol = gl.getAttribLocation(this.spriteProg, 'iColor');
+    const locSMeta = gl.getAttribLocation(this.spriteProg, 'iMeta');
 
-    gl.enableVertexAttribArray(locSPosRot);
-    gl.vertexAttribPointer(locSPosRot, 4, gl.FLOAT, false, sStride, 0);
-    gl.vertexAttribDivisor(locSPosRot, 1);
+    [
+      [locPosYaw, 0],
+      [locSizePB, 16],
+      [locUvR, 32],
+      [locSCol, 48],
+      [locSMeta, 64]
+    ].forEach(([loc, offset]) => {
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, sStride, offset);
+      gl.vertexAttribDivisor(loc, 1);
+    });
 
-    gl.enableVertexAttribArray(locSSizeFlash);
-    gl.vertexAttribPointer(locSSizeFlash, 4, gl.FLOAT, false, sStride, 16);
-    gl.vertexAttribDivisor(locSSizeFlash, 1);
-
-    gl.enableVertexAttribArray(locSUvRect);
-    gl.vertexAttribPointer(locSUvRect, 4, gl.FLOAT, false, sStride, 32);
-    gl.vertexAttribDivisor(locSUvRect, 1);
-
-    gl.enableVertexAttribArray(locSCol);
-    gl.vertexAttribPointer(locSCol, 4, gl.FLOAT, false, sStride, 48);
-    gl.vertexAttribDivisor(locSCol, 1);
-
-    // 3. Instanced Particle VAO
+    // 3. 3D Instanced Particle VAO
     this.particleVao = gl.createVertexArray();
     gl.bindVertexArray(this.particleVao);
 
@@ -463,7 +553,7 @@ export class WebGLPostRenderer {
     const pStride = this.particleFloats * 4;
 
     const locIPos = gl.getAttribLocation(this.particleProg, 'iPosSize');
-    const locIVel = gl.getAttribLocation(this.particleProg, 'iVel');
+    const locIVel = gl.getAttribLocation(this.particleProg, 'iVelStretch');
     const locICol = gl.getAttribLocation(this.particleProg, 'iColor');
 
     gl.enableVertexAttribArray(locIPos);
@@ -471,14 +561,14 @@ export class WebGLPostRenderer {
     gl.vertexAttribDivisor(locIPos, 1);
 
     gl.enableVertexAttribArray(locIVel);
-    gl.vertexAttribPointer(locIVel, 2, gl.FLOAT, false, pStride, 16);
+    gl.vertexAttribPointer(locIVel, 4, gl.FLOAT, false, pStride, 16);
     gl.vertexAttribDivisor(locIVel, 1);
 
     gl.enableVertexAttribArray(locICol);
-    gl.vertexAttribPointer(locICol, 4, gl.FLOAT, false, pStride, 24);
+    gl.vertexAttribPointer(locICol, 4, gl.FLOAT, false, pStride, 32);
     gl.vertexAttribDivisor(locICol, 1);
 
-    // 4. Fullscreen Triangle-Strip Quad VAO
+    // 4. Fullscreen Quad VAO
     this.fsVao = gl.createVertexArray();
     this.fsVbo = gl.createBuffer();
     gl.bindVertexArray(this.fsVao);
@@ -489,6 +579,139 @@ export class WebGLPostRenderer {
     gl.vertexAttribPointer(locFsPos, 2, gl.FLOAT, false, 0, 0);
 
     gl.bindVertexArray(null);
+  }
+
+  updateCamera(mode, player, width, height, dt = 0.016) {
+    this.cam.mode = mode;
+    const w = Math.max(1, width);
+    const h = Math.max(1, height);
+    const aspect = w / h;
+    this.cam.aspect = aspect;
+
+    // Fit full arena cleanly in view
+    const halfH = h * 0.5;
+    const baseDist = halfH / Math.tan(this.cam.fovY * 0.5);
+
+    let desiredEye;
+    let desiredTarget;
+    let upHint;
+
+    const px = player ? player.x : w * 0.5;
+    const py = player ? player.y : h * 0.55;
+    const pz = player ? (player.z || 55) : 55;
+
+    if (mode === 'chase_3d' && player) {
+      const ca = Math.cos(player.angle);
+      const sa = Math.sin(player.angle);
+      desiredEye = [px - ca * 290, py - sa * 290, pz + 145];
+      desiredTarget = [px + ca * 280, py + sa * 280, pz * 0.55];
+      upHint = [0, 0, 1];
+    } else if (mode === 'cockpit_3d' && player) {
+      const ca = Math.cos(player.angle);
+      const sa = Math.sin(player.angle);
+      desiredEye = [px + ca * 14, py + sa * 14, pz + 24];
+      desiredTarget = [px + ca * 420, py + sa * 420, pz - 18];
+      upHint = [0, 0, 1];
+    } else if (mode === 'topdown_25d') {
+      desiredEye = [w * 0.5, h * 0.5 + 12, baseDist * 1.02];
+      desiredTarget = [w * 0.5, h * 0.5, 18];
+      upHint = [0, -1, 0];
+    } else {
+      // tactical_3d (Default dramatic angled 3D perspective arena)
+      const followX = (px - w * 0.5) * 0.14;
+      const followY = (py - h * 0.5) * 0.12;
+      desiredEye = [w * 0.5 + followX, h * 0.5 + followY + baseDist * 0.44, baseDist * 0.92];
+      desiredTarget = [w * 0.5 + followX * 0.65, h * 0.5 + followY * 0.65 - 24, 18];
+      upHint = [0, -1, 0];
+    }
+
+    const lerpRate = Math.min(1, dt * 6.5);
+    for (let i = 0; i < 3; i++) {
+      this.cam.eye[i] += (desiredEye[i] - this.cam.eye[i]) * lerpRate;
+      this.cam.target[i] += (desiredTarget[i] - this.cam.target[i]) * lerpRate;
+    }
+
+    const forward = norm3([
+      this.cam.target[0] - this.cam.eye[0],
+      this.cam.target[1] - this.cam.eye[1],
+      this.cam.target[2] - this.cam.eye[2]
+    ]);
+    let right = cross3(upHint, forward);
+    if (Math.hypot(right[0], right[1], right[2]) < 0.001) {
+      right = [1, 0, 0];
+    } else {
+      right = norm3(right);
+    }
+    const camUp = norm3(cross3(forward, right));
+
+    this.cam.forward = forward;
+    this.cam.right = right;
+    this.cam.camUp = camUp;
+
+    // Build View-Projection column-major mat4
+    const f = this.cam.f;
+    const sx = f / aspect;
+    const sy = f;
+    const near = this.cam.near;
+    const far = this.cam.far;
+    const a = (far + near) / (far - near);
+    const b = (-2 * far * near) / (far - near);
+
+    const ex = dot3(this.cam.eye, right);
+    const ey = dot3(this.cam.eye, camUp);
+    const ez = dot3(this.cam.eye, forward);
+
+    const m = this.cam.viewProj;
+    m[0] = sx * right[0];   m[4] = sx * right[1];   m[8] = sx * right[2];    m[12] = -sx * ex;
+    m[1] = sy * camUp[0];   m[5] = sy * camUp[1];   m[9] = sy * camUp[2];    m[13] = -sy * ey;
+    m[2] = a * forward[0];  m[6] = a * forward[1];  m[10] = a * forward[2];  m[14] = -a * ez + b;
+    m[3] = forward[0];      m[7] = forward[1];      m[11] = forward[2];      m[15] = -ez;
+  }
+
+  worldToScreen(wx, wy, wz = 0) {
+    const { eye, right, camUp, forward, f, aspect } = this.cam;
+    const dx = wx - eye[0];
+    const dy = wy - eye[1];
+    const dz = wz - eye[2];
+    const cx = dx * right[0] + dy * right[1] + dz * right[2];
+    const cy = dx * camUp[0] + dy * camUp[1] + dz * camUp[2];
+    const cz = dx * forward[0] + dy * forward[1] + dz * forward[2];
+    if (cz <= 4) {
+      return { visible: false, x: -999, y: -999, scale: 0, cz };
+    }
+    const ndcX = (cx / cz) * (f / aspect);
+    const ndcY = (cy / cz) * f;
+    return {
+      visible: true,
+      x: (ndcX * 0.5 + 0.5) * this.width,
+      y: (0.5 - ndcY * 0.5) * this.height,
+      scale: (f * this.height * 0.5) / cz,
+      cz
+    };
+  }
+
+  screenToWorldPlane(screenX, screenY, planeZ = 55) {
+    const { eye, right, camUp, forward, f, aspect } = this.cam;
+    const ndcX = (screenX / Math.max(1, this.width)) * 2 - 1;
+    const ndcY = 1 - (screenY / Math.max(1, this.height)) * 2;
+    const rx = ndcX * (aspect / f);
+    const ry = ndcY / f;
+    const dir = norm3([
+      forward[0] + right[0] * rx + camUp[0] * ry,
+      forward[1] + right[1] * rx + camUp[1] * ry,
+      forward[2] + right[2] * rx + camUp[2] * ry
+    ]);
+
+    let t = 900;
+    if (Math.abs(dir[2]) > 0.02) {
+      const hitT = (planeZ - eye[2]) / dir[2];
+      if (hitT > 20) t = Math.min(3500, hitT);
+    }
+    return {
+      x: eye[0] + dir[0] * t,
+      y: eye[1] + dir[1] * t,
+      z: planeZ
+    };
   }
 
   setSpriteAtlas(canvasOrImage) {
@@ -562,7 +785,7 @@ export class WebGLPostRenderer {
     }
   }
 
-  beginFrame() {
+  beginFrame(arMode = 'off') {
     this.lineVertCount = 0;
     this.alphaSpriteCount = 0;
     this.addSpriteCount = 0;
@@ -570,13 +793,18 @@ export class WebGLPostRenderer {
     this.singularities.length = 0;
     this.shockwaves.length = 0;
     this.drawCalls = 0;
+    this.arMode = arMode;
 
     if (this.fallback2D && this.ctx2d) {
       const ctx = this.ctx2d;
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = '#03040a';
-      ctx.fillRect(0, 0, this.width, this.height);
+      if (arMode === 'camera') {
+        ctx.clearRect(0, 0, this.width, this.height);
+      } else {
+        ctx.fillStyle = arMode === 'synthetic' ? '#04120c' : '#03040a';
+        ctx.fillRect(0, 0, this.width, this.height);
+      }
       ctx.globalCompositeOperation = 'lighter';
       return;
     }
@@ -585,34 +813,40 @@ export class WebGLPostRenderer {
       const gl = this.gl;
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFBO.fbo);
       gl.viewport(0, 0, this.sceneFBO.w, this.sceneFBO.h);
-      gl.clearColor(0.012, 0.016, 0.042, 1.0);
+      if (arMode === 'camera') {
+        gl.clearColor(0.0, 0.0, 0.0, 0.0);
+      } else if (arMode === 'synthetic') {
+        gl.clearColor(0.01, 0.045, 0.025, 1.0);
+      } else {
+        gl.clearColor(0.012, 0.016, 0.042, 1.0);
+      }
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.enable(gl.BLEND);
     }
   }
 
-  _pushLineVertex(x, y, r, g, b, a, u, v) {
+  _pushLineVertex3D(x, y, z, ox, oy, oz, side, r, g, b, a, u, v) {
     const idx = this.lineVertCount * this.lineFloatsPerVert;
     const d = this.lineData;
-    d[idx] = x;
-    d[idx + 1] = y;
-    d[idx + 2] = r;
-    d[idx + 3] = g;
-    d[idx + 4] = b;
-    d[idx + 5] = a;
-    d[idx + 6] = u;
-    d[idx + 7] = v;
+    d[idx] = x; d[idx + 1] = y; d[idx + 2] = z;
+    d[idx + 3] = ox; d[idx + 4] = oy; d[idx + 5] = oz;
+    d[idx + 6] = side;
+    d[idx + 7] = r; d[idx + 8] = g; d[idx + 9] = b; d[idx + 10] = a;
+    d[idx + 11] = u; d[idx + 12] = v;
     this.lineVertCount++;
   }
 
-  drawLine(x1, y1, x2, y2, r, g, b, a = 1, thickness = 2) {
+  drawLine3D(x1, y1, z1, x2, y2, z2, r, g, b, a = 1, thickness = 2) {
     if (this.fallback2D && this.ctx2d) {
+      const p1 = this.worldToScreen(x1, y1, z1);
+      const p2 = this.worldToScreen(x2, y2, z2);
+      if (!p1.visible || !p2.visible) return;
       const ctx = this.ctx2d;
       ctx.strokeStyle = `rgba(${(r * 255) | 0},${(g * 255) | 0},${(b * 255) | 0},${a})`;
       ctx.lineWidth = thickness;
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
       ctx.stroke();
       return;
     }
@@ -621,36 +855,45 @@ export class WebGLPostRenderer {
       this._flushLines();
     }
 
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const len = Math.hypot(dx, dy);
-    if (len < 0.001) return;
+    const s = Math.max(0.8, thickness * 0.9);
+    // 2 triangles forming screen-aligned ribbon in clip space
+    this._pushLineVertex3D(x1, y1, z1, x2, y2, z2, -s, r, g, b, a, 0, -1);
+    this._pushLineVertex3D(x1, y1, z1, x2, y2, z2, s, r, g, b, a, 0, 1);
+    this._pushLineVertex3D(x2, y2, z2, x1, y1, z1, -s, r, g, b, a, 1, 1);
 
-    const half = Math.max(0.8, thickness * 0.9);
-    const nx = (-dy / len) * half;
-    const ny = (dx / len) * half;
-
-    this._pushLineVertex(x1 - nx, y1 - ny, r, g, b, a, 0, -1);
-    this._pushLineVertex(x1 + nx, y1 + ny, r, g, b, a, 0, 1);
-    this._pushLineVertex(x2 + nx, y2 + ny, r, g, b, a, 1, 1);
-
-    this._pushLineVertex(x1 - nx, y1 - ny, r, g, b, a, 0, -1);
-    this._pushLineVertex(x2 + nx, y2 + ny, r, g, b, a, 1, 1);
-    this._pushLineVertex(x2 - nx, y2 - ny, r, g, b, a, 1, -1);
+    this._pushLineVertex3D(x1, y1, z1, x2, y2, z2, -s, r, g, b, a, 0, -1);
+    this._pushLineVertex3D(x2, y2, z2, x1, y1, z1, -s, r, g, b, a, 1, 1);
+    this._pushLineVertex3D(x2, y2, z2, x1, y1, z1, s, r, g, b, a, 1, -1);
   }
 
-  drawPoly(points, r, g, b, a = 1, closed = true, thickness = 2.2) {
+  drawLine(x1, y1, x2, y2, r, g, b, a = 1, thickness = 2, z1 = this.defaultZ, z2 = z1) {
+    this.drawLine3D(x1, y1, z1, x2, y2, z2, r, g, b, a, thickness);
+  }
+
+  drawPoly(points, r, g, b, a = 1, closed = true, thickness = 2.2, defaultZ = this.defaultZ) {
     const n = points.length;
     if (n < 2) return;
     for (let i = 0; i < n - 1; i++) {
-      this.drawLine(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y, r, g, b, a, thickness);
+      const p0 = points[i];
+      const p1 = points[i + 1];
+      this.drawLine3D(
+        p0.x, p0.y, p0.z ?? defaultZ,
+        p1.x, p1.y, p1.z ?? defaultZ,
+        r, g, b, a, thickness
+      );
     }
     if (closed && n > 2) {
-      this.drawLine(points[n - 1].x, points[n - 1].y, points[0].x, points[0].y, r, g, b, a, thickness);
+      const pLast = points[n - 1];
+      const pFirst = points[0];
+      this.drawLine3D(
+        pLast.x, pLast.y, pLast.z ?? defaultZ,
+        pFirst.x, pFirst.y, pFirst.z ?? defaultZ,
+        r, g, b, a, thickness
+      );
     }
   }
 
-  drawCircle(x, y, radius, r, g, b, a = 1, segments = 24, thickness = 2) {
+  drawCircle3D(x, y, z, radius, r, g, b, a = 1, segments = 24, thickness = 2) {
     const step = (Math.PI * 2) / segments;
     let px = x + radius;
     let py = y;
@@ -658,13 +901,17 @@ export class WebGLPostRenderer {
       const ang = i * step;
       const nx = x + Math.cos(ang) * radius;
       const ny = y + Math.sin(ang) * radius;
-      this.drawLine(px, py, nx, ny, r, g, b, a, thickness);
+      this.drawLine3D(px, py, z, nx, ny, z, r, g, b, a, thickness);
       px = nx;
       py = ny;
     }
   }
 
-  drawArc(x, y, radius, startAng, endAng, r, g, b, a = 1, segments = 16, thickness = 2.5) {
+  drawCircle(x, y, radius, r, g, b, a = 1, segments = 24, thickness = 2, z = this.defaultZ) {
+    this.drawCircle3D(x, y, z, radius, r, g, b, a, segments, thickness);
+  }
+
+  drawArc(x, y, radius, startAng, endAng, r, g, b, a = 1, segments = 16, thickness = 2.5, z = this.defaultZ) {
     const span = endAng - startAng;
     let px = x + Math.cos(startAng) * radius;
     let py = y + Math.sin(startAng) * radius;
@@ -672,48 +919,67 @@ export class WebGLPostRenderer {
       const ang = startAng + (span * i) / segments;
       const nx = x + Math.cos(ang) * radius;
       const ny = y + Math.sin(ang) * radius;
-      this.drawLine(px, py, nx, ny, r, g, b, a, thickness);
+      this.drawLine3D(px, py, z, nx, ny, z, r, g, b, a, thickness);
       px = nx;
       py = ny;
     }
   }
 
-  drawSprite(
+  drawBox3D(cx, cy, baseZ, w, d, h, r, g, b, a = 0.7, thickness = 1.5) {
+    const hw = w * 0.5;
+    const hd = d * 0.5;
+    const topZ = baseZ + h;
+    const x0 = cx - hw, x1 = cx + hw;
+    const y0 = cy - hd, y1 = cy + hd;
+
+    // Base footprint
+    this.drawLine3D(x0, y0, baseZ, x1, y0, baseZ, r, g, b, a * 0.5, thickness);
+    this.drawLine3D(x1, y0, baseZ, x1, y1, baseZ, r, g, b, a * 0.5, thickness);
+    this.drawLine3D(x1, y1, baseZ, x0, y1, baseZ, r, g, b, a * 0.5, thickness);
+    this.drawLine3D(x0, y1, baseZ, x0, y0, baseZ, r, g, b, a * 0.5, thickness);
+
+    // Roof perimeter (brighter)
+    this.drawLine3D(x0, y0, topZ, x1, y0, topZ, r, g, b, a, thickness * 1.2);
+    this.drawLine3D(x1, y0, topZ, x1, y1, topZ, r, g, b, a, thickness * 1.2);
+    this.drawLine3D(x1, y1, topZ, x0, y1, topZ, r, g, b, a, thickness * 1.2);
+    this.drawLine3D(x0, y1, topZ, x0, y0, topZ, r, g, b, a, thickness * 1.2);
+
+    // 4 Vertical corners
+    this.drawLine3D(x0, y0, baseZ, x0, y0, topZ, r, g, b, a * 0.85, thickness);
+    this.drawLine3D(x1, y0, baseZ, x1, y0, topZ, r, g, b, a * 0.85, thickness);
+    this.drawLine3D(x1, y1, baseZ, x1, y1, topZ, r, g, b, a * 0.85, thickness);
+    this.drawLine3D(x0, y1, baseZ, x0, y1, topZ, r, g, b, a * 0.85, thickness);
+  }
+
+  drawSprite3D(
     spriteDef,
-    x,
-    y,
-    width,
-    height,
-    rotation = 0,
-    r = 1,
-    g = 1,
-    b = 1,
-    a = 1,
+    x, y, z,
+    width, height,
+    yaw = 0,
+    pitch = 0,
+    bank = 0,
+    r = 1, g = 1, b = 1, a = 1,
     hitFlash = 0,
     additive = false,
-    bankTilt = 0,
-    emissiveBoost = 0.55
+    emissiveBoost = 0.65,
+    billboard = false
   ) {
     if (!spriteDef) return;
 
     if (this.fallback2D && this.ctx2d && this.atlasCanvas) {
+      const p = this.worldToScreen(x, y, z);
+      if (!p.visible) return;
       const ctx = this.ctx2d;
       ctx.save();
       ctx.globalCompositeOperation = additive ? 'lighter' : 'source-over';
       ctx.globalAlpha = a;
-      ctx.translate(x, y);
-      ctx.rotate(rotation);
-      ctx.scale(1 - Math.abs(bankTilt) * 0.14, 1);
+      ctx.translate(p.x, p.y);
+      ctx.rotate(yaw + Math.PI * 0.5);
+      ctx.scale(p.scale * (1 - Math.abs(bank) * 0.16), p.scale);
       ctx.drawImage(
         this.atlasCanvas,
-        spriteDef.px,
-        spriteDef.py,
-        spriteDef.pw,
-        spriteDef.ph,
-        -width * 0.5,
-        -height * 0.5,
-        width,
-        height
+        spriteDef.px, spriteDef.py, spriteDef.pw, spriteDef.ph,
+        -width * 0.5, -height * 0.5, width, height
       );
       ctx.restore();
       ctx.globalCompositeOperation = 'lighter';
@@ -724,29 +990,37 @@ export class WebGLPostRenderer {
       if (this.addSpriteCount >= this.maxSprites) this._flushSprites(true);
       const idx = this.addSpriteCount * this.spriteFloats;
       const d = this.addSpriteData;
-      d[idx] = x; d[idx + 1] = y; d[idx + 2] = rotation; d[idx + 3] = bankTilt;
-      d[idx + 4] = width; d[idx + 5] = height; d[idx + 6] = hitFlash; d[idx + 7] = emissiveBoost;
+      d[idx] = x; d[idx + 1] = y; d[idx + 2] = z; d[idx + 3] = yaw;
+      d[idx + 4] = width; d[idx + 5] = height; d[idx + 6] = pitch; d[idx + 7] = bank;
       d[idx + 8] = spriteDef.u0; d[idx + 9] = spriteDef.v0; d[idx + 10] = spriteDef.u1; d[idx + 11] = spriteDef.v1;
       d[idx + 12] = r; d[idx + 13] = g; d[idx + 14] = b; d[idx + 15] = a;
+      d[idx + 16] = hitFlash; d[idx + 17] = emissiveBoost; d[idx + 18] = billboard ? 1.0 : 0.0; d[idx + 19] = 0;
       this.addSpriteCount++;
     } else {
       if (this.alphaSpriteCount >= this.maxSprites) this._flushSprites(false);
       const idx = this.alphaSpriteCount * this.spriteFloats;
       const d = this.alphaSpriteData;
-      d[idx] = x; d[idx + 1] = y; d[idx + 2] = rotation; d[idx + 3] = bankTilt;
-      d[idx + 4] = width; d[idx + 5] = height; d[idx + 6] = hitFlash; d[idx + 7] = emissiveBoost;
+      d[idx] = x; d[idx + 1] = y; d[idx + 2] = z; d[idx + 3] = yaw;
+      d[idx + 4] = width; d[idx + 5] = height; d[idx + 6] = pitch; d[idx + 7] = bank;
       d[idx + 8] = spriteDef.u0; d[idx + 9] = spriteDef.v0; d[idx + 10] = spriteDef.u1; d[idx + 11] = spriteDef.v1;
       d[idx + 12] = r; d[idx + 13] = g; d[idx + 14] = b; d[idx + 15] = a;
+      d[idx + 16] = hitFlash; d[idx + 17] = emissiveBoost; d[idx + 18] = billboard ? 1.0 : 0.0; d[idx + 19] = 0;
       this.alphaSpriteCount++;
     }
   }
 
-  drawParticle(x, y, size, r, g, b, a = 1, vx = 0, vy = 0, stretch = 0.03) {
+  drawSprite(spriteDef, x, y, width, height, rotation = 0, r = 1, g = 1, b = 1, a = 1, hitFlash = 0, additive = false, bankTilt = 0, emissiveBoost = 0.55) {
+    this.drawSprite3D(spriteDef, x, y, this.defaultZ, width, height, rotation - Math.PI * 0.5, 0, bankTilt, r, g, b, a, hitFlash, additive, emissiveBoost, false);
+  }
+
+  drawParticle3D(x, y, z, size, r, g, b, a = 1, vx = 0, vy = 0, vz = 0, stretch = 0.03) {
     if (this.fallback2D && this.ctx2d) {
+      const p = this.worldToScreen(x, y, z);
+      if (!p.visible) return;
       const ctx = this.ctx2d;
       ctx.fillStyle = `rgba(${(r * 255) | 0},${(g * 255) | 0},${(b * 255) | 0},${a * 0.7})`;
       ctx.beginPath();
-      ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, Math.max(1, size * 0.5 * p.scale), 0, Math.PI * 2);
       ctx.fill();
       return;
     }
@@ -757,25 +1031,22 @@ export class WebGLPostRenderer {
 
     const idx = this.particleCount * this.particleFloats;
     const d = this.particleData;
-    d[idx] = x;
-    d[idx + 1] = y;
-    d[idx + 2] = size;
-    d[idx + 3] = stretch;
-    d[idx + 4] = vx;
-    d[idx + 5] = vy;
-    d[idx + 6] = r;
-    d[idx + 7] = g;
-    d[idx + 8] = b;
-    d[idx + 9] = a;
+    d[idx] = x; d[idx + 1] = y; d[idx + 2] = z; d[idx + 3] = size;
+    d[idx + 4] = vx; d[idx + 5] = vy; d[idx + 6] = vz; d[idx + 7] = stretch;
+    d[idx + 8] = r; d[idx + 9] = g; d[idx + 10] = b; d[idx + 11] = a;
     this.particleCount++;
   }
 
-  draw3DWireframe(vertices3D, edges, x, y, scale, rotX, rotY, rotZ, r, g, b, a = 1, thickness = 2.2) {
+  drawParticle(x, y, size, r, g, b, a = 1, vx = 0, vy = 0, stretch = 0.03, z = this.defaultZ) {
+    this.drawParticle3D(x, y, z, size, r, g, b, a, vx, vy, 0, stretch);
+  }
+
+  draw3DWireframe(vertices3D, edges, x, y, scale, rotX, rotY, rotZ, r, g, b, a = 1, thickness = 2.2, z = this.defaultZ) {
     const cx = Math.cos(rotX), sx = Math.sin(rotX);
     const cy = Math.cos(rotY), sy = Math.sin(rotY);
     const cz = Math.cos(rotZ), sz = Math.sin(rotZ);
 
-    const projected = new Array(vertices3D.length);
+    const pts = new Array(vertices3D.length);
     for (let i = 0; i < vertices3D.length; i++) {
       const v = vertices3D[i];
       const y1 = v[1] * cx - v[2] * sx;
@@ -785,43 +1056,43 @@ export class WebGLPostRenderer {
       const x3 = x2 * cz - y1 * sz;
       const y3 = x2 * sz + y1 * cz;
 
-      const perspective = 4.2 / (4.2 - z2 * 0.85);
-      projected[i] = {
-        x: x + x3 * scale * perspective,
-        y: y + y3 * scale * perspective,
-        z: z2
+      pts[i] = {
+        x: x + x3 * scale,
+        y: y + y3 * scale,
+        z: z + z2 * scale
       };
     }
 
     for (let i = 0; i < edges.length; i++) {
       const e = edges[i];
-      const p1 = projected[e[0]];
-      const p2 = projected[e[1]];
-      const depthAlpha = Math.max(0.35, Math.min(1.0, 0.72 + (p1.z + p2.z) * 0.18));
-      this.drawLine(p1.x, p1.y, p2.x, p2.y, r, g, b, a * depthAlpha, thickness);
+      const p1 = pts[e[0]];
+      const p2 = pts[e[1]];
+      this.drawLine3D(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, r, g, b, a, thickness);
     }
   }
 
-  addSingularityUniform(x, y, radiusPx, strength) {
-    if (this.singularities.length < 8) {
-      this.singularities.push({
-        xUv: x / this.width,
-        yUv: 1.0 - y / this.height,
-        radUv: radiusPx / this.height,
-        strength
-      });
-    }
+  addSingularityUniform(wx, wy, wz, radiusWorld, strength) {
+    if (this.singularities.length >= 8) return;
+    const p = this.worldToScreen(wx, wy, wz);
+    if (!p.visible) return;
+    this.singularities.push({
+      xUv: p.x / this.width,
+      yUv: 1.0 - p.y / this.height,
+      radUv: (radiusWorld * p.scale) / this.height,
+      strength
+    });
   }
 
-  addShockwaveUniform(x, y, radiusPx, thicknessPx) {
-    if (this.shockwaves.length < 8) {
-      this.shockwaves.push({
-        xUv: x / this.width,
-        yUv: 1.0 - y / this.height,
-        radUv: radiusPx / this.height,
-        thickUv: thicknessPx / this.height
-      });
-    }
+  addShockwaveUniform(wx, wy, wz, radiusWorld, thicknessWorld) {
+    if (this.shockwaves.length >= 8) return;
+    const p = this.worldToScreen(wx, wy, wz);
+    if (!p.visible) return;
+    this.shockwaves.push({
+      xUv: p.x / this.width,
+      yUv: 1.0 - p.y / this.height,
+      radUv: (radiusWorld * p.scale) / this.height,
+      thickUv: (thicknessWorld * p.scale) / this.height
+    });
   }
 
   flushLayer() {
@@ -837,6 +1108,7 @@ export class WebGLPostRenderer {
     const gl = this.gl;
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
     gl.useProgram(this.lineProg);
+    gl.uniformMatrix4fv(gl.getUniformLocation(this.lineProg, 'uViewProj'), false, this.cam.viewProj);
     gl.uniform2f(gl.getUniformLocation(this.lineProg, 'uResolution'), this.width, this.height);
     gl.bindVertexArray(this.lineVao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.lineVbo);
@@ -854,7 +1126,9 @@ export class WebGLPostRenderer {
 
     gl.blendFunc(gl.SRC_ALPHA, additive ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(this.spriteProg);
-    gl.uniform2f(gl.getUniformLocation(this.spriteProg, 'uResolution'), this.width, this.height);
+    gl.uniformMatrix4fv(gl.getUniformLocation(this.spriteProg, 'uViewProj'), false, this.cam.viewProj);
+    gl.uniform3fv(gl.getUniformLocation(this.spriteProg, 'uCamRight'), this.cam.right);
+    gl.uniform3fv(gl.getUniformLocation(this.spriteProg, 'uCamUp'), this.cam.camUp);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
     gl.uniform1i(gl.getUniformLocation(this.spriteProg, 'uAtlas'), 0);
@@ -874,7 +1148,9 @@ export class WebGLPostRenderer {
     const gl = this.gl;
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
     gl.useProgram(this.particleProg);
-    gl.uniform2f(gl.getUniformLocation(this.particleProg, 'uResolution'), this.width, this.height);
+    gl.uniformMatrix4fv(gl.getUniformLocation(this.particleProg, 'uViewProj'), false, this.cam.viewProj);
+    gl.uniform3fv(gl.getUniformLocation(this.particleProg, 'uCamRight'), this.cam.right);
+    gl.uniform3fv(gl.getUniformLocation(this.particleProg, 'uCamUp'), this.cam.camUp);
     gl.bindVertexArray(this.particleVao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.particleVbo);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.particleData.subarray(0, this.particleCount * this.particleFloats));
@@ -895,12 +1171,9 @@ export class WebGLPostRenderer {
     if (this.fallback2D || !this.gl) return;
 
     const gl = this.gl;
-
-    // 1. Flush any remaining scene geometry into sceneFBO
     this.flushLayer();
     gl.disable(gl.BLEND);
 
-    // 2. Multi-pass HDR Bloom Extract & Separable Blur
     gl.useProgram(this.bloomProg);
     gl.bindVertexArray(this.fsVao);
     const uTex = gl.getUniformLocation(this.bloomProg, 'uTex');
@@ -936,7 +1209,6 @@ export class WebGLPostRenderer {
     gl.uniform2f(uDir, 0.0, 2.2);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    // 3. Final Composite Pass to Screen
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 
@@ -955,6 +1227,7 @@ export class WebGLPostRenderer {
     gl.uniform1f(gl.getUniformLocation(this.compositeProg, 'uAberration'), aberration);
     gl.uniform1f(gl.getUniformLocation(this.compositeProg, 'uLensingStrength'), lensingStrength);
     gl.uniform1f(gl.getUniformLocation(this.compositeProg, 'uChronoShift'), chronoShift);
+    gl.uniform1f(gl.getUniformLocation(this.compositeProg, 'uArTransparent'), this.arMode === 'camera' ? 1.0 : 0.0);
     gl.uniform2f(
       gl.getUniformLocation(this.compositeProg, 'uShakeOffset'),
       shakeX / this.width,
